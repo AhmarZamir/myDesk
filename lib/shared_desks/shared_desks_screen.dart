@@ -111,6 +111,47 @@ class _SharedDesksScreenState extends State<SharedDesksScreen> {
     if (joined == true) await _reload();
   }
 
+  Future<void> _showMembers(Map<String, dynamic> desk) async {
+    try {
+      final members = await _service.fetchDeskMembers(desk['id'] as String);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('${desk['name']} members'),
+          content: SizedBox(
+            width: 440,
+            child: members.isEmpty
+                ? const Text('No members found.')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: members.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final member = members[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(child: Text(_initials('${member['full_name']}'))),
+                        title: Text('${member['full_name']}${member['is_me'] == true ? ' (You)' : ''}'),
+                        subtitle: Text('${member['role']}'),
+                      );
+                    },
+                  ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not load members: $e')));
+    }
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    return parts.take(2).map((p) => p[0].toUpperCase()).join();
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -168,38 +209,42 @@ class _SharedDesksScreenState extends State<SharedDesksScreen> {
                       crossAxisCount: columns,
                       crossAxisSpacing: 14,
                       mainAxisSpacing: 14,
-                      childAspectRatio: 1.7,
+                      childAspectRatio: 1.55,
                     ),
                     itemCount: rows.length,
                     itemBuilder: (context, index) {
                       final membership = rows[index];
                       final desk = Map<String, dynamic>.from(membership['desks'] as Map);
                       return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  CircleAvatar(child: Icon(_iconForType('${desk['type']}'))),
-                                  const Spacer(),
-                                  Chip(label: Text('${membership['role']}')),
-                                ],
-                              ),
-                              const Spacer(),
-                              Text('${desk['name']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                              const SizedBox(height: 5),
-                              Text('${desk['type']} desk', style: const TextStyle(color: Colors.black54)),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  const Icon(Icons.key, size: 17),
-                                  const SizedBox(width: 6),
-                                  SelectableText('${desk['invite_code']}', style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1.1)),
-                                ],
-                              ),
-                            ],
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => _showMembers(desk),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(child: Icon(_iconForType('${desk['type']}'))),
+                                    const Spacer(),
+                                    Chip(label: Text('${membership['role']}')),
+                                  ],
+                                ),
+                                const Spacer(),
+                                Text('${desk['name']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 5),
+                                Text('${desk['type']} desk · Tap to view members', style: const TextStyle(color: Colors.black54)),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.key, size: 17),
+                                    const SizedBox(width: 6),
+                                    Expanded(child: SelectableText('${desk['invite_code']}', style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1.1))),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );

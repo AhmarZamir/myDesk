@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../shared_desks/shared_desks_screen.dart';
 import '../workspace/documents_screen.dart';
-import '../workspace/workspace_modules.dart' show BillsScreen, TasksScreen, KhataScreen;
+import '../workspace/collaboration_modules.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -127,8 +127,8 @@ class _DashboardPage extends StatelessWidget {
             childAspectRatio: 2.1,
             children: const [
               _StatCard(icon: Icons.folder_outlined, title: 'Documents', value: 'Private & selective sharing'),
-              _StatCard(icon: Icons.receipt_long_outlined, title: 'Bills', value: 'Track due payments'),
-              _StatCard(icon: Icons.task_alt_outlined, title: 'Tasks', value: 'Manage responsibilities'),
+              _StatCard(icon: Icons.receipt_long_outlined, title: 'Bills', value: 'Assign payment responsibility'),
+              _StatCard(icon: Icons.task_alt_outlined, title: 'Tasks', value: 'Assign to desk members'),
               _StatCard(icon: Icons.groups_outlined, title: 'Shared Desks', value: 'Family & trusted groups'),
             ],
           );
@@ -141,6 +141,8 @@ class _DashboardPage extends StatelessWidget {
               ListTile(leading: Icon(Icons.security_outlined), title: Text('Private by default'), subtitle: Text('Every upload starts with you deciding who can see it')),
               Divider(),
               ListTile(leading: Icon(Icons.family_restroom), title: Text('Selective sharing'), subtitle: Text('Share with a whole desk or only selected members')),
+              Divider(),
+              ListTile(leading: Icon(Icons.assignment_ind_outlined), title: Text('Clear responsibility'), subtitle: Text('Tasks and bills can be assigned to specific people')),
               Divider(),
               ListTile(leading: Icon(Icons.sync), title: Text('Same product everywhere'), subtitle: Text('The same permissions and content on web and mobile')),
             ]),

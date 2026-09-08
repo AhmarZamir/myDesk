@@ -1,0 +1,23 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Platform generated/local files
+android/.gradle/
+ios/Pods/
+macos/Pods/
+
+# Environment/secrets
+.env
+.env.*
+!.env.example

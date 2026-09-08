@@ -14,6 +14,26 @@ class WorkspaceService {
     return List<Map<String, dynamic>>.from(data);
   }
 
+  Future<List<Map<String, dynamic>>> desks() async {
+    final data = await _db.from('desks').select('id,name,type').order('created_at');
+    return List<Map<String, dynamic>>.from(data);
+  }
+
+  Future<List<Map<String, dynamic>>> deskMembers(String deskId) async {
+    final data = await _db.rpc('get_desk_members', params: {'p_desk_id': deskId});
+    return List<Map<String, dynamic>>.from(data as List);
+  }
+
+  Future<List<String>> documentRecipientIds(String documentId) async {
+    final data = await _db
+        .from('document_access')
+        .select('user_id')
+        .eq('document_id', documentId);
+    return List<Map<String, dynamic>>.from(data)
+        .map((row) => row['user_id'] as String)
+        .toList();
+  }
+
   Future<void> uploadDocument({
     required String title,
     required String category,
@@ -21,8 +41,16 @@ class WorkspaceService {
     required Uint8List bytes,
     String? deskId,
     String visibility = 'private',
+    List<String> recipientIds = const [],
   }) async {
     await _ensureProfile();
+
+    if (visibility != 'private' && deskId == null) {
+      throw ArgumentError('A Shared Desk is required for shared documents.');
+    }
+    if (visibility == 'custom' && recipientIds.isEmpty) {
+      throw ArgumentError('Select at least one person for custom access.');
+    }
 
     final safeName = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     final storagePath = '$_uid/${DateTime.now().millisecondsSinceEpoch}_$safeName';
@@ -33,18 +61,71 @@ class WorkspaceService {
       fileOptions: const FileOptions(upsert: false),
     );
 
+    String? documentId;
     try {
-      await _db.from('documents').insert({
+      final inserted = await _db.from('documents').insert({
         'owner_id': _uid,
         'desk_id': deskId,
         'title': title,
         'category': category,
         'storage_path': storagePath,
         'visibility': visibility,
-      });
+      }).select('id').single();
+
+      documentId = inserted['id'] as String;
+
+      if (visibility == 'custom') {
+        await _db.from('document_access').insert(
+          recipientIds
+              .where((id) => id != _uid)
+              .toSet()
+              .map((id) => {
+                    'document_id': documentId,
+                    'user_id': id,
+                    'granted_by': _uid,
+                  })
+              .toList(),
+        );
+      }
     } catch (_) {
+      if (documentId != null) {
+        await _db.from('documents').delete().eq('id', documentId);
+      }
       await _db.storage.from('documents').remove([storagePath]);
       rethrow;
+    }
+  }
+
+  Future<void> updateDocumentAccess({
+    required String documentId,
+    required String visibility,
+    String? deskId,
+    List<String> recipientIds = const [],
+  }) async {
+    if (visibility != 'private' && deskId == null) {
+      throw ArgumentError('A Shared Desk is required for shared documents.');
+    }
+    if (visibility == 'custom' && recipientIds.isEmpty) {
+      throw ArgumentError('Select at least one person.');
+    }
+
+    await _db.from('documents').update({
+      'visibility': visibility,
+      'desk_id': visibility == 'private' ? null : deskId,
+    }).eq('id', documentId);
+
+    await _db.from('document_access').delete().eq('document_id', documentId);
+    if (visibility == 'custom') {
+      final rows = recipientIds
+          .where((id) => id != _uid)
+          .toSet()
+          .map((id) => {
+                'document_id': documentId,
+                'user_id': id,
+                'granted_by': _uid,
+              })
+          .toList();
+      if (rows.isNotEmpty) await _db.from('document_access').insert(rows);
     }
   }
 
@@ -68,6 +149,7 @@ class WorkspaceService {
     required double amount,
     DateTime? dueDate,
     String? deskId,
+    String? assignedTo,
   }) async {
     await _ensureProfile();
     await _db.from('bills').insert({
@@ -76,6 +158,7 @@ class WorkspaceService {
       'title': title,
       'amount': amount,
       'due_date': dueDate?.toIso8601String().split('T').first,
+      'assigned_to': assignedTo,
       'status': 'unpaid',
     });
   }
@@ -96,11 +179,12 @@ class WorkspaceService {
     DateTime? dueDate,
     String priority = 'medium',
     String? deskId,
+    String? assigneeId,
   }) async {
     await _ensureProfile();
     await _db.from('tasks').insert({
       'creator_id': _uid,
-      'assignee_id': _uid,
+      'assignee_id': assigneeId ?? _uid,
       'desk_id': deskId,
       'title': title,
       'description': description,
@@ -147,9 +231,4 @@ class WorkspaceService {
       }).eq('id', id);
 
   Future<void> deleteKhata(String id) => _db.from('khata_entries').delete().eq('id', id);
-
-  Future<List<Map<String, dynamic>>> desks() async {
-    final data = await _db.from('desks').select('id,name,type').order('created_at');
-    return List<Map<String, dynamic>>.from(data);
-  }
 }

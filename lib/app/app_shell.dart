@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../shared_desks/shared_desks_screen.dart';
-import '../workspace/workspace_modules.dart';
+import '../workspace/documents_screen.dart';
+import '../workspace/workspace_modules.dart' show BillsScreen, TasksScreen, KhataScreen;
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -125,7 +126,7 @@ class _DashboardPage extends StatelessWidget {
             crossAxisSpacing: 14,
             childAspectRatio: 2.1,
             children: const [
-              _StatCard(icon: Icons.folder_outlined, title: 'Documents', value: 'Secure storage'),
+              _StatCard(icon: Icons.folder_outlined, title: 'Documents', value: 'Private & selective sharing'),
               _StatCard(icon: Icons.receipt_long_outlined, title: 'Bills', value: 'Track due payments'),
               _StatCard(icon: Icons.task_alt_outlined, title: 'Tasks', value: 'Manage responsibilities'),
               _StatCard(icon: Icons.groups_outlined, title: 'Shared Desks', value: 'Family & trusted groups'),
@@ -137,11 +138,11 @@ class _DashboardPage extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.all(20),
             child: Column(children: [
-              ListTile(leading: Icon(Icons.security_outlined), title: Text('Personal records'), subtitle: Text('Private documents, receipts and certificates')),
+              ListTile(leading: Icon(Icons.security_outlined), title: Text('Private by default'), subtitle: Text('Every upload starts with you deciding who can see it')),
               Divider(),
-              ListTile(leading: Icon(Icons.family_restroom), title: Text('Shared life'), subtitle: Text('Family files, common bills, tasks and expenses')),
+              ListTile(leading: Icon(Icons.family_restroom), title: Text('Selective sharing'), subtitle: Text('Share with a whole desk or only selected members')),
               Divider(),
-              ListTile(leading: Icon(Icons.sync), title: Text('Same product everywhere'), subtitle: Text('The same account and workflows on web and mobile')),
+              ListTile(leading: Icon(Icons.sync), title: Text('Same product everywhere'), subtitle: Text('The same permissions and content on web and mobile')),
             ]),
           ),
         ),

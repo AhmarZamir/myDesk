@@ -5,6 +5,10 @@ class WorkspaceService {
   SupabaseClient get _db => Supabase.instance.client;
   String get _uid => _db.auth.currentUser!.id;
 
+  Future<void> _ensureProfile() async {
+    await _db.rpc('ensure_current_profile');
+  }
+
   Future<List<Map<String, dynamic>>> documents() async {
     final data = await _db.from('documents').select().order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(data);
@@ -18,6 +22,8 @@ class WorkspaceService {
     String? deskId,
     String visibility = 'private',
   }) async {
+    await _ensureProfile();
+
     final safeName = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     final storagePath = '$_uid/${DateTime.now().millisecondsSinceEpoch}_$safeName';
 
@@ -63,6 +69,7 @@ class WorkspaceService {
     DateTime? dueDate,
     String? deskId,
   }) async {
+    await _ensureProfile();
     await _db.from('bills').insert({
       'owner_id': _uid,
       'desk_id': deskId,
@@ -90,6 +97,7 @@ class WorkspaceService {
     String priority = 'medium',
     String? deskId,
   }) async {
+    await _ensureProfile();
     await _db.from('tasks').insert({
       'creator_id': _uid,
       'assignee_id': _uid,
@@ -119,6 +127,7 @@ class WorkspaceService {
     required bool theyOweMe,
     String? deskId,
   }) async {
+    await _ensureProfile();
     await _db.from('khata_entries').insert({
       'desk_id': deskId,
       'created_by': _uid,

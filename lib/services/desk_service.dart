@@ -17,7 +17,13 @@ class DeskService {
     return List<Map<String, dynamic>>.from(rows);
   }
 
+  Future<List<Map<String, dynamic>>> fetchDeskMembers(String deskId) async {
+    final rows = await _client.rpc('get_desk_members', params: {'p_desk_id': deskId});
+    return List<Map<String, dynamic>>.from(rows as List);
+  }
+
   Future<Map<String, dynamic>> createDesk({required String name, required String type}) async {
+    await _client.rpc('ensure_current_profile');
     final result = await _client.rpc('create_desk', params: {
       'p_name': name.trim(),
       'p_type': type,
@@ -26,6 +32,7 @@ class DeskService {
   }
 
   Future<Map<String, dynamic>> joinDesk(String inviteCode) async {
+    await _client.rpc('ensure_current_profile');
     final result = await _client.rpc('join_desk', params: {
       'p_invite_code': inviteCode.trim(),
     });

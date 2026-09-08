@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class WorkspaceService {
@@ -9,25 +10,47 @@ class WorkspaceService {
     return List<Map<String, dynamic>>.from(data);
   }
 
-  Future<void> addDocument({
+  Future<void> uploadDocument({
     required String title,
     required String category,
+    required String fileName,
+    required Uint8List bytes,
     String? deskId,
     String visibility = 'private',
-    DateTime? expiresAt,
   }) async {
-    await _db.from('documents').insert({
-      'owner_id': _uid,
-      'desk_id': deskId,
-      'title': title,
-      'category': category,
-      'storage_path': 'metadata-only',
-      'visibility': visibility,
-      'expires_at': expiresAt?.toIso8601String(),
-    });
+    final safeName = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final storagePath = '$_uid/${DateTime.now().millisecondsSinceEpoch}_$safeName';
+
+    await _db.storage.from('documents').uploadBinary(
+      storagePath,
+      bytes,
+      fileOptions: const FileOptions(upsert: false),
+    );
+
+    try {
+      await _db.from('documents').insert({
+        'owner_id': _uid,
+        'desk_id': deskId,
+        'title': title,
+        'category': category,
+        'storage_path': storagePath,
+        'visibility': visibility,
+      });
+    } catch (_) {
+      await _db.storage.from('documents').remove([storagePath]);
+      rethrow;
+    }
   }
 
-  Future<void> deleteDocument(String id) => _db.from('documents').delete().eq('id', id);
+  Future<String> documentUrl(String storagePath) async =>
+      _db.storage.from('documents').createSignedUrl(storagePath, 600);
+
+  Future<void> deleteDocument(String id, String storagePath) async {
+    await _db.from('documents').delete().eq('id', id);
+    if (storagePath != 'metadata-only') {
+      await _db.storage.from('documents').remove([storagePath]);
+    }
+  }
 
   Future<List<Map<String, dynamic>>> bills() async {
     final data = await _db.from('bills').select().order('created_at', ascending: false);
@@ -92,14 +115,17 @@ class WorkspaceService {
   Future<void> addKhataEntry({
     required double amount,
     required String note,
+    required String counterpartyName,
     required bool theyOweMe,
     String? deskId,
   }) async {
     await _db.from('khata_entries').insert({
       'desk_id': deskId,
       'created_by': _uid,
-      'creditor_id': theyOweMe ? _uid : _uid,
+      'creditor_id': _uid,
       'debtor_id': _uid,
+      'counterparty_name': counterpartyName,
+      'direction': theyOweMe ? 'receivable' : 'payable',
       'amount': amount,
       'note': note,
       'status': 'open',

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class WorkspaceService {
   SupabaseClient get _db => Supabase.instance.client;
   String get _uid => _db.auth.currentUser!.id;
+  String get currentUserId => _uid;
 
   Future<void> _ensureProfile() async {
     await _db.rpc('ensure_current_profile');
@@ -75,17 +76,16 @@ class WorkspaceService {
       documentId = inserted['id'] as String;
 
       if (visibility == 'custom') {
-        await _db.from('document_access').insert(
-          recipientIds
-              .where((id) => id != _uid)
-              .toSet()
-              .map((id) => {
-                    'document_id': documentId,
-                    'user_id': id,
-                    'granted_by': _uid,
-                  })
-              .toList(),
-        );
+        final rows = recipientIds
+            .where((id) => id != _uid)
+            .toSet()
+            .map((id) => {
+                  'document_id': documentId,
+                  'user_id': id,
+                  'granted_by': _uid,
+                })
+            .toList();
+        if (rows.isNotEmpty) await _db.from('document_access').insert(rows);
       }
     } catch (_) {
       if (documentId != null) {

@@ -1,7 +1,7 @@
 name: mydesk
 description: Cross-platform personal and shared life workspace.
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.15.4
 
 dev_dependencies:
   flutter_test:

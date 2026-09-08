@@ -1,5 +1,5 @@
 -- Guarantee that every authenticated user has a matching public.profiles row.
--- This is safe to call repeatedly and also repairs users created before the profile trigger existed.
+-- Safe to call repeatedly and repairs users created before the profile trigger existed.
 
 create or replace function public.ensure_current_profile()
 returns public.profiles
@@ -8,34 +8,36 @@ security definer
 set search_path = public, auth
 as $$
 declare
-  current_profile public.profiles;
-  current_user auth.users;
+  v_profile public.profiles;
+  v_user_id uuid;
+  v_full_name text;
 begin
-  if auth.uid() is null then
+  v_user_id := auth.uid();
+
+  if v_user_id is null then
     raise exception 'Not authenticated';
   end if;
 
-  select * into current_user
-  from auth.users
-  where id = auth.uid();
+  select coalesce(u.raw_user_meta_data ->> 'full_name', '')
+  into v_full_name
+  from auth.users u
+  where u.id = v_user_id;
 
-  if current_user.id is null then
+  if not found then
     raise exception 'Authenticated user could not be found';
   end if;
 
   insert into public.profiles (id, full_name)
-  values (
-    current_user.id,
-    coalesce(current_user.raw_user_meta_data ->> 'full_name', '')
-  )
+  values (v_user_id, v_full_name)
   on conflict (id) do update
     set updated_at = now();
 
-  select * into current_profile
-  from public.profiles
-  where id = current_user.id;
+  select p.*
+  into v_profile
+  from public.profiles p
+  where p.id = v_user_id;
 
-  return current_profile;
+  return v_profile;
 end;
 $$;
 

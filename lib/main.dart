@@ -91,7 +91,9 @@ class _ConfigurationScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: const SelectableText(
-                          'flutter run -d chrome \\\n  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \\\n  --dart-define=SUPABASE_PUBLISHABLE_KEY=YOUR_KEY',
+                          '''flutter run -d chrome \\
+  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \\
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=YOUR_KEY''',
                           style: TextStyle(fontFamily: 'monospace'),
                         ),
                       ),

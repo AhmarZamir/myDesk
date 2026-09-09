@@ -5,16 +5,8 @@ class DeskService {
   DeskService([SupabaseClient? client]) : _client = client ?? Supabase.instance.client;
 
   Future<List<Map<String, dynamic>>> fetchMyDesks() async {
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) return [];
-
-    final rows = await _client
-        .from('desk_members')
-        .select('role, joined_at, desks(id, name, type, owner_id, invite_code, created_at)')
-        .eq('user_id', userId)
-        .order('joined_at', ascending: false);
-
-    return List<Map<String, dynamic>>.from(rows);
+    final rows = await _client.rpc('get_my_desks');
+    return List<Map<String, dynamic>>.from(rows as List);
   }
 
   Future<List<Map<String, dynamic>>> fetchDeskMembers(String deskId) async {
@@ -37,5 +29,37 @@ class DeskService {
       'p_invite_code': inviteCode.trim(),
     });
     return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<String> rotateInvite(String deskId) async {
+    final result = await _client.rpc('rotate_desk_invite', params: {'p_desk_id': deskId});
+    return result.toString();
+  }
+
+  Future<void> leaveDesk(String deskId) async {
+    await _client.rpc('leave_desk', params: {'p_desk_id': deskId});
+  }
+
+  Future<void> deleteDesk(String deskId) async {
+    await _client.rpc('delete_desk', params: {'p_desk_id': deskId});
+  }
+
+  Future<void> setMemberRole({
+    required String deskId,
+    required String userId,
+    required String role,
+  }) async {
+    await _client.rpc('set_desk_member_role', params: {
+      'p_desk_id': deskId,
+      'p_user_id': userId,
+      'p_role': role,
+    });
+  }
+
+  Future<void> removeMember({required String deskId, required String userId}) async {
+    await _client.rpc('remove_desk_member', params: {
+      'p_desk_id': deskId,
+      'p_user_id': userId,
+    });
   }
 }

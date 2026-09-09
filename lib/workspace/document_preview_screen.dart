@@ -23,11 +23,46 @@ class DocumentPreviewScreen extends StatelessWidget {
   bool get _isImage => const {'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'}.contains(_ext);
   bool get _isPdf => _ext == 'pdf';
 
+  Uri get _downloadUri {
+    final uri = Uri.parse(url);
+    return uri.replace(queryParameters: {
+      ...uri.queryParameters,
+      'download': _downloadName,
+    });
+  }
+
+  String get _downloadName {
+    final cleanTitle = title.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    if (_ext.isEmpty || cleanTitle.toLowerCase().endsWith('.$_ext')) return cleanTitle.isEmpty ? 'document' : cleanTitle;
+    return '${cleanTitle.isEmpty ? 'document' : cleanTitle}.$_ext';
+  }
+
+  Future<void> _download(BuildContext context) async {
+    try {
+      final opened = await launchUrl(_downloadUri, mode: LaunchMode.externalApplication);
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not download this file.')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not download this file: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(title, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+        actions: [
+          IconButton(
+            tooltip: 'Download',
+            onPressed: () => _download(context),
+            icon: const Icon(Icons.download_rounded),
+          ),
+          const SizedBox(width: 6),
+        ],
       ),
       body: _isImage
           ? Container(
@@ -46,7 +81,11 @@ class DocumentPreviewScreen extends StatelessWidget {
             )
           : _isPdf
               ? PdfViewer.uri(Uri.parse(url))
-              : _UnsupportedPreview(title: title, extension: _ext, url: url),
+              : _UnsupportedPreview(
+                  title: title,
+                  extension: _ext,
+                  onDownload: () => _download(context),
+                ),
     );
   }
 }
@@ -54,30 +93,27 @@ class DocumentPreviewScreen extends StatelessWidget {
 class _UnsupportedPreview extends StatefulWidget {
   final String title;
   final String extension;
-  final String url;
+  final Future<void> Function() onDownload;
 
-  const _UnsupportedPreview({required this.title, required this.extension, required this.url});
+  const _UnsupportedPreview({
+    required this.title,
+    required this.extension,
+    required this.onDownload,
+  });
 
   @override
   State<_UnsupportedPreview> createState() => _UnsupportedPreviewState();
 }
 
 class _UnsupportedPreviewState extends State<_UnsupportedPreview> {
-  bool _opening = false;
+  bool _downloading = false;
 
-  Future<void> _openFile() async {
-    setState(() => _opening = true);
+  Future<void> _download() async {
+    setState(() => _downloading = true);
     try {
-      final opened = await launchUrl(Uri.parse(widget.url), mode: LaunchMode.externalApplication);
-      if (!opened && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open this file.')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open this file: $e')));
-      }
+      await widget.onDownload();
     } finally {
-      if (mounted) setState(() => _opening = false);
+      if (mounted) setState(() => _downloading = false);
     }
   }
 
@@ -97,20 +133,20 @@ class _UnsupportedPreviewState extends State<_UnsupportedPreview> {
                 const SizedBox(height: 8),
                 Text(
                   _isZip
-                      ? 'ZIP archives cannot be previewed inside myDesk. You can download or open the archive on your device.'
+                      ? 'ZIP archives cannot be previewed inside myDesk, but you can download the original archive.'
                       : widget.extension.isEmpty
-                          ? 'This file type does not have an in-app preview yet. You can still open or download the original file.'
-                          : '${widget.extension.toUpperCase()} files do not have an in-app preview yet. You can still open or download the original file.',
+                          ? 'This file type does not have an in-app preview yet, but you can download the original file.'
+                          : '${widget.extension.toUpperCase()} files do not have an in-app preview yet, but you can download the original file.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 20),
                 FilledButton.icon(
-                  onPressed: _opening ? null : _openFile,
-                  icon: _opening
+                  onPressed: _downloading ? null : _download,
+                  icon: _downloading
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : Icon(_isZip ? Icons.download_rounded : Icons.open_in_new_rounded),
-                  label: Text(_isZip ? 'Download ZIP' : 'Open file'),
+                      : const Icon(Icons.download_rounded),
+                  label: Text(_isZip ? 'Download ZIP' : 'Download file'),
                 ),
               ]),
             ),

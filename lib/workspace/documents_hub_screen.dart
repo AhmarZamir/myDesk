@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/workspace_service.dart';
-import 'documents_screen.dart';
+import 'buddy_documents_manager_screen.dart';
 
 class DocumentsHubScreen extends StatefulWidget {
   const DocumentsHubScreen({super.key});
@@ -17,7 +17,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
   void _refresh() => setState(_reload);
 
   Future<void> _openManager() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => const Scaffold(body: SafeArea(child: DocumentsScreen()))));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const BuddyDocumentsManagerScreen()));
     _refresh();
   }
 
@@ -65,7 +65,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
     ],
   );
 
-  String _visibility(String v) => v == 'desk' ? 'Desk members' : v == 'custom' ? 'Selected people' : 'Private';
+  String _visibility(String v) => v == 'desk' ? 'Desk members' : v == 'custom' ? 'Selected Buddies' : 'Private';
   String _date(dynamic value) { final d = DateTime.tryParse('${value ?? ''}'); if (d == null) return ''; return '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}'; }
   IconData _iconFor(String c) { switch (c) { case 'id': return Icons.badge_outlined; case 'certificate': return Icons.workspace_premium_outlined; case 'property': return Icons.home_work_outlined; case 'medical': return Icons.medical_information_outlined; case 'receipt': return Icons.receipt_outlined; default: return Icons.description_outlined; } }
 }

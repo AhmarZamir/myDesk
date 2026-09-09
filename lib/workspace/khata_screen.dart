@@ -12,6 +12,7 @@ class _BuddyKhataScreenState extends State<BuddyKhataScreen> {
   final service = WorkspaceService();
   late Future<List<Map<String, dynamic>>> _buddies;
   late Future<List<Map<String, dynamic>>> _entries;
+  int _tab = 0;
 
   @override
   void initState() {
@@ -34,8 +35,19 @@ class _BuddyKhataScreenState extends State<BuddyKhataScreen> {
         const Text('Khata', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
         const SizedBox(height: 5),
         Text(
-          'Each Buddy has a separate account. Open a person to manage your inflow and outflow with them.',
+          _tab == 0
+              ? 'Customers are Khata accounts you manage with your Buddies.'
+              : 'Community shows Khata accounts your Buddies shared with you. These ledgers are read-only.',
           style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 20),
+        SegmentedButton<int>(
+          segments: const [
+            ButtonSegment(value: 0, icon: Icon(Icons.person_outline), label: Text('Customers')),
+            ButtonSegment(value: 1, icon: Icon(Icons.groups_outlined), label: Text('Community')),
+          ],
+          selected: {_tab},
+          onSelectionChanged: (value) => setState(() => _tab = value.first),
         ),
         const SizedBox(height: 24),
         FutureBuilder<List<dynamic>>(
@@ -51,86 +63,18 @@ class _BuddyKhataScreenState extends State<BuddyKhataScreen> {
             final buddies = List<Map<String, dynamic>>.from(snapshot.data![0] as List);
             final entries = List<Map<String, dynamic>>.from(snapshot.data![1] as List);
 
-            if (buddies.isEmpty) {
-              return const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(34),
-                  child: Column(children: [
-                    Icon(Icons.people_outline, size: 46),
-                    SizedBox(height: 12),
-                    Text('No Buddy accounts yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                    SizedBox(height: 6),
-                    Text('Add a Buddy first. Each Buddy will automatically get their own Khata account here.', textAlign: TextAlign.center),
-                  ]),
-                ),
-              );
-            }
-
-            return LayoutBuilder(builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 1000 ? 3 : constraints.maxWidth >= 650 ? 2 : 1;
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: buddies.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  crossAxisSpacing: 14,
-                  mainAxisSpacing: 14,
-                  childAspectRatio: columns == 1 ? 3.3 : 1.55,
-                ),
-                itemBuilder: (context, index) {
-                  final buddy = buddies[index];
-                  final buddyId = buddy['user_id'] as String;
-                  final buddyEntries = entries.where((e) => e['buddy_user_id'] == buddyId).toList();
-                  double receivable = 0;
-                  double payable = 0;
-                  for (final item in buddyEntries.where((e) => e['status'] != 'settled')) {
-                    final mine = item['created_by'] == service.currentUserId;
-                    final creatorReceivable = item['direction'] == 'receivable';
-                    final receivableForMe = mine ? creatorReceivable : !creatorReceivable;
-                    final value = double.tryParse('${item['amount']}') ?? 0;
-                    if (receivableForMe) receivable += value; else payable += value;
-                  }
-                  final net = receivable - payable;
-                  return Card(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => BuddyLedgerScreen(buddy: buddy)),
-                        );
-                        _refresh();
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            _BuddyAvatar(name: '${buddy['full_name']}', url: buddy['avatar_url']?.toString()),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text('${buddy['full_name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 2),
-                                Text('${buddyEntries.length} ${buddyEntries.length == 1 ? 'entry' : 'entries'}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                              ]),
-                            ),
-                            const Icon(Icons.chevron_right),
-                          ]),
-                          const Spacer(),
-                          Text(net > 0 ? 'They owe you' : net < 0 ? 'You owe them' : 'Settled', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Rs. ${net.abs().toStringAsFixed(2)}',
-                            style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: net == 0 ? null : Theme.of(context).colorScheme.primary),
-                          ),
-                        ]),
-                      ),
-                    ),
+            return _tab == 0
+                ? _CustomersView(
+                    service: service,
+                    buddies: buddies,
+                    entries: entries,
+                    onChanged: _refresh,
+                  )
+                : _CommunityView(
+                    service: service,
+                    buddies: buddies,
+                    entries: entries,
                   );
-                },
-              );
-            });
           },
         ),
       ],
@@ -138,9 +82,184 @@ class _BuddyKhataScreenState extends State<BuddyKhataScreen> {
   }
 }
 
+class _CustomersView extends StatelessWidget {
+  final WorkspaceService service;
+  final List<Map<String, dynamic>> buddies;
+  final List<Map<String, dynamic>> entries;
+  final VoidCallback onChanged;
+
+  const _CustomersView({
+    required this.service,
+    required this.buddies,
+    required this.entries,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (buddies.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(34),
+          child: Column(children: [
+            Icon(Icons.people_outline, size: 46),
+            SizedBox(height: 12),
+            Text('No Buddy customers yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            SizedBox(height: 6),
+            Text('Add a Buddy first. You can then maintain a separate Khata account for that person.', textAlign: TextAlign.center),
+          ]),
+        ),
+      );
+    }
+
+    final myEntries = entries.where((e) => e['created_by'] == service.currentUserId).toList();
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 1000 ? 3 : constraints.maxWidth >= 650 ? 2 : 1;
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: buddies.length,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: 14,
+          mainAxisSpacing: 14,
+          childAspectRatio: columns == 1 ? 3.3 : 1.55,
+        ),
+        itemBuilder: (context, index) {
+          final buddy = buddies[index];
+          final buddyId = buddy['user_id'] as String;
+          final buddyEntries = myEntries.where((e) => e['buddy_user_id'] == buddyId).toList();
+          final net = _netForCurrentUser(service, buddyEntries);
+
+          return Card(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => BuddyLedgerScreen(buddy: buddy, readOnly: false)),
+                );
+                onChanged();
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    _BuddyAvatar(name: '${buddy['full_name']}', url: buddy['avatar_url']?.toString()),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('${buddy['full_name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 2),
+                        Text('Your Khata · ${buddyEntries.length} ${buddyEntries.length == 1 ? 'entry' : 'entries'}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      ]),
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ]),
+                  const Spacer(),
+                  Text(_netLabel(net, buddy['full_name']?.toString() ?? 'Buddy'), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 4),
+                  Text('Rs. ${net.abs().toStringAsFixed(2)}', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: net == 0 ? null : Theme.of(context).colorScheme.primary)),
+                ]),
+              ),
+            ),
+          );
+        },
+      );
+    });
+  }
+}
+
+class _CommunityView extends StatelessWidget {
+  final WorkspaceService service;
+  final List<Map<String, dynamic>> buddies;
+  final List<Map<String, dynamic>> entries;
+
+  const _CommunityView({required this.service, required this.buddies, required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final sharedEntries = entries.where((e) => e['created_by'] != service.currentUserId && e['buddy_user_id'] == service.currentUserId).toList();
+    final creatorIds = sharedEntries.map((e) => e['created_by']?.toString()).whereType<String>().toSet();
+    final sharedBuddies = buddies.where((b) => creatorIds.contains(b['user_id']?.toString())).toList();
+
+    if (sharedBuddies.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(34),
+          child: Column(children: [
+            Icon(Icons.groups_outlined, size: 46),
+            SizedBox(height: 12),
+            Text('Nothing shared with you yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            SizedBox(height: 6),
+            Text('When a Buddy creates a Khata account with you, it will appear here as a read-only community ledger.', textAlign: TextAlign.center),
+          ]),
+        ),
+      );
+    }
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 1000 ? 3 : constraints.maxWidth >= 650 ? 2 : 1;
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: sharedBuddies.length,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: 14,
+          mainAxisSpacing: 14,
+          childAspectRatio: columns == 1 ? 3.3 : 1.55,
+        ),
+        itemBuilder: (context, index) {
+          final buddy = sharedBuddies[index];
+          final buddyId = buddy['user_id'] as String;
+          final buddyEntries = sharedEntries.where((e) => e['created_by'] == buddyId).toList();
+          final net = _netForCurrentUser(service, buddyEntries);
+          final name = buddy['full_name']?.toString() ?? 'Buddy';
+
+          return Card(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => BuddyLedgerScreen(buddy: buddy, readOnly: true)),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    _BuddyAvatar(name: name, url: buddy['avatar_url']?.toString()),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 2),
+                        Text('Shared with you · read-only', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      ]),
+                    ),
+                    const Icon(Icons.visibility_outlined),
+                  ]),
+                  const Spacer(),
+                  Text(_netLabel(net, name), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 4),
+                  Text('Rs. ${net.abs().toStringAsFixed(2)}', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: net == 0 ? null : Theme.of(context).colorScheme.primary)),
+                ]),
+              ),
+            ),
+          );
+        },
+      );
+    });
+  }
+}
+
 class BuddyLedgerScreen extends StatefulWidget {
   final Map<String, dynamic> buddy;
-  const BuddyLedgerScreen({super.key, required this.buddy});
+  final bool readOnly;
+  const BuddyLedgerScreen({super.key, required this.buddy, required this.readOnly});
 
   @override
   State<BuddyLedgerScreen> createState() => _BuddyLedgerScreenState();
@@ -162,6 +281,7 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
   void _refresh() => setState(() => _future = service.khataEntries());
 
   Future<void> _add() async {
+    if (widget.readOnly) return;
     final amount = TextEditingController();
     final note = TextEditingController();
     bool theyOweMe = true;
@@ -182,12 +302,7 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
                 onSelectionChanged: (v) => setLocal(() => theyOweMe = v.first),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: amount,
-                autofocus: true,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Amount', prefixText: 'Rs. '),
-              ),
+              TextField(controller: amount, autofocus: true, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount', prefixText: 'Rs. ')),
               const SizedBox(height: 12),
               TextField(controller: note, maxLines: 2, decoration: const InputDecoration(labelText: 'Note (optional)')),
               const SizedBox(height: 10),
@@ -212,13 +327,7 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
     final value = double.tryParse(amount.text.trim());
     if (ok == true && value != null) {
       try {
-        await service.addKhataEntry(
-          amount: value,
-          note: note.text,
-          counterpartyName: buddyName,
-          theyOweMe: theyOweMe,
-          buddyUserId: buddyId,
-        );
+        await service.addKhataEntry(amount: value, note: note.text, counterpartyName: buddyName, theyOweMe: theyOweMe, buddyUserId: buddyId);
         _refresh();
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add entry: $e')));
@@ -250,13 +359,17 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
           Expanded(child: Text('$buddyName · Khata', overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
         ]),
       ),
-      floatingActionButton: FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Add entry')),
+      floatingActionButton: widget.readOnly ? null : FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Add entry')),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (snapshot.hasError) return Center(child: Text('Could not load ledger: ${snapshot.error}'));
-          final items = (snapshot.data ?? []).where((e) => e['buddy_user_id'] == buddyId).toList();
+
+          final all = snapshot.data ?? [];
+          final items = widget.readOnly
+              ? all.where((e) => e['created_by'] == buddyId && e['buddy_user_id'] == service.currentUserId).toList()
+              : all.where((e) => e['created_by'] == service.currentUserId && e['buddy_user_id'] == buddyId).toList();
 
           double receivable = 0;
           double payable = 0;
@@ -272,6 +385,21 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
             children: [
+              if (widget.readOnly)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.lock_outline),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('Community ledger · read-only. Only the Buddy who owns this Khata can edit, settle, or delete entries.')),
+                  ]),
+                ),
               _NetBalanceBar(buddyName: buddyName, net: net),
               const SizedBox(height: 14),
               Card(
@@ -286,10 +414,10 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text('Transactions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              Text(widget.readOnly ? 'Shared transactions' : 'Transactions', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
               if (items.isEmpty)
-                const Card(child: Padding(padding: EdgeInsets.all(30), child: Center(child: Text('No transactions with this Buddy yet.')))),
+                Card(child: Padding(padding: const EdgeInsets.all(30), child: Center(child: Text(widget.readOnly ? 'No shared transactions from this Buddy yet.' : 'No transactions with this Buddy yet.')))),
               ...items.map((item) {
                 final mine = item['created_by'] == service.currentUserId;
                 final creatorReceivable = item['direction'] == 'receivable';
@@ -303,12 +431,12 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
                     subtitle: Text([
                       receivableForMe ? '$buddyName owes you' : 'You owe $buddyName',
                       settled ? 'settled' : 'open',
-                      if (!mine) 'Added by $buddyName · read-only',
+                      if (widget.readOnly) 'Added by $buddyName · read-only',
                       if ((item['note'] ?? '').toString().trim().isNotEmpty) '${item['note']}',
                     ].join(' · ')),
                     trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
                       Text('${receivableForMe ? '+' : '-'} Rs. ${item['amount']}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                      if (mine)
+                      if (!widget.readOnly && mine)
                         PopupMenuButton<String>(
                           onSelected: (value) async {
                             if (value == 'settle') await service.settleKhata(item['id']);
@@ -332,6 +460,25 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
   }
 }
 
+double _netForCurrentUser(WorkspaceService service, List<Map<String, dynamic>> items) {
+  double receivable = 0;
+  double payable = 0;
+  for (final item in items.where((e) => e['status'] != 'settled')) {
+    final mine = item['created_by'] == service.currentUserId;
+    final creatorReceivable = item['direction'] == 'receivable';
+    final receivableForMe = mine ? creatorReceivable : !creatorReceivable;
+    final value = double.tryParse('${item['amount']}') ?? 0;
+    if (receivableForMe) receivable += value; else payable += value;
+  }
+  return receivable - payable;
+}
+
+String _netLabel(double net, String buddyName) {
+  if (net > 0) return '$buddyName owes you';
+  if (net < 0) return 'You owe $buddyName';
+  return 'Settled';
+}
+
 class _NetBalanceBar extends StatelessWidget {
   final String buddyName;
   final double net;
@@ -347,11 +494,6 @@ class _NetBalanceBar extends StatelessWidget {
         : positive
             ? '$buddyName owes you Rs. ${net.abs().toStringAsFixed(2)}'
             : 'You owe $buddyName Rs. ${net.abs().toStringAsFixed(2)}';
-    final helper = settled
-        ? 'There is no outstanding balance between you and $buddyName.'
-        : positive
-            ? 'This is your current net receivable after all open inflow and outflow entries.'
-            : 'This is your current net payable after all open inflow and outflow entries.';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -366,13 +508,7 @@ class _NetBalanceBar extends StatelessWidget {
           child: Icon(icon, color: settled ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onPrimary),
         ),
         const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(message, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 3),
-            Text(helper, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ]),
-        ),
+        Expanded(child: Text(message, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900))),
       ]),
     );
   }

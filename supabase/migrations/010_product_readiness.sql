@@ -45,7 +45,6 @@ grant execute on function public.is_user_desk_member(uuid, uuid) to authenticate
 grant execute on function public.desk_role(uuid) to authenticated;
 grant execute on function public.can_manage_desk(uuid) to authenticated;
 
--- Return only the invite information the caller is allowed to use.
 create or replace function public.get_my_desks()
 returns table (
   id uuid,
@@ -91,7 +90,6 @@ begin
   if not public.can_manage_desk(p_desk_id) then
     raise exception 'Only desk owners and admins can rotate invite codes';
   end if;
-
   new_code := public.generate_invite_code();
   update public.desks set invite_code = new_code where id = p_desk_id;
   return new_code;
@@ -116,7 +114,6 @@ begin
   if caller_role = 'owner' then
     raise exception 'Desk owners must delete the desk or transfer ownership before leaving';
   end if;
-
   delete from public.desk_members
   where desk_id = p_desk_id and user_id = auth.uid();
 end;
@@ -149,7 +146,7 @@ returns void
 language plpgsql
 security definer
 set search_path = public
-as $$;
+as $$
 begin
   if not public.owns_desk(p_desk_id) then
     raise exception 'Only the desk owner can change member roles';
@@ -160,11 +157,9 @@ begin
   if p_role not in ('admin', 'member', 'viewer') then
     raise exception 'Invalid role';
   end if;
-
   update public.desk_members
   set role = p_role
   where desk_id = p_desk_id and user_id = p_user_id;
-
   if not found then
     raise exception 'Member not found';
   end if;
@@ -191,11 +186,9 @@ begin
   if p_user_id = auth.uid() then
     raise exception 'Use Leave desk to remove yourself';
   end if;
-
   select role into target_role
   from public.desk_members
   where desk_id = p_desk_id and user_id = p_user_id;
-
   if target_role is null then
     raise exception 'Member not found';
   end if;
@@ -205,7 +198,6 @@ begin
   if public.desk_role(p_desk_id) = 'admin' and target_role = 'admin' then
     raise exception 'Admins cannot remove other admins';
   end if;
-
   delete from public.desk_members
   where desk_id = p_desk_id and user_id = p_user_id;
 end;
@@ -213,7 +205,6 @@ $$;
 
 grant execute on function public.remove_desk_member(uuid, uuid) to authenticated;
 
--- Fine-grained document grants must target an actual member of the selected desk.
 drop policy if exists "Document owners can manage access" on public.document_access;
 create policy "Document owners can manage access"
 on public.document_access for all to authenticated
@@ -231,8 +222,8 @@ with check (
   )
 );
 
--- Bills: owner, assignee, and desk managers can view shared bills.
 drop policy if exists "Desk members can view bills" on public.bills;
+drop policy if exists "Relevant users can view bills" on public.bills;
 create policy "Relevant users can view bills"
 on public.bills for select to authenticated
 using (
@@ -242,14 +233,12 @@ using (
 );
 
 drop policy if exists "Users can create bills" on public.bills;
+drop policy if exists "Users can create valid bills" on public.bills;
 create policy "Users can create valid bills"
 on public.bills for insert to authenticated
 with check (
   owner_id = auth.uid()
-  and (
-    desk_id is null
-    or public.is_desk_member(desk_id)
-  )
+  and (desk_id is null or public.is_desk_member(desk_id))
   and (
     assigned_to is null
     or assigned_to = auth.uid()
@@ -258,6 +247,7 @@ with check (
 );
 
 drop policy if exists "Owners and assignees can update bills" on public.bills;
+drop policy if exists "Owners assignees and managers can update bills" on public.bills;
 create policy "Owners assignees and managers can update bills"
 on public.bills for update to authenticated
 using (
@@ -271,8 +261,8 @@ with check (
   or (desk_id is not null and public.can_manage_desk(desk_id))
 );
 
--- Tasks: creator, assignee, and desk managers see shared tasks.
 drop policy if exists "Desk members can view tasks" on public.tasks;
+drop policy if exists "Relevant users can view tasks" on public.tasks;
 create policy "Relevant users can view tasks"
 on public.tasks for select to authenticated
 using (
@@ -282,14 +272,12 @@ using (
 );
 
 drop policy if exists "Users can create tasks" on public.tasks;
+drop policy if exists "Users can create valid tasks" on public.tasks;
 create policy "Users can create valid tasks"
 on public.tasks for insert to authenticated
 with check (
   creator_id = auth.uid()
-  and (
-    desk_id is null
-    or public.is_desk_member(desk_id)
-  )
+  and (desk_id is null or public.is_desk_member(desk_id))
   and (
     assignee_id is null
     or assignee_id = auth.uid()
@@ -298,6 +286,7 @@ with check (
 );
 
 drop policy if exists "Creators and assignees can update tasks" on public.tasks;
+drop policy if exists "Creators assignees and managers can update tasks" on public.tasks;
 create policy "Creators assignees and managers can update tasks"
 on public.tasks for update to authenticated
 using (

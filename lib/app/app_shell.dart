@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import '../shared_desks/shared_desks_screen.dart';
 import '../workspace/documents_screen.dart';
 import '../workspace/collaboration_modules.dart';
+import '../workspace/khata_screen.dart';
 import '../buddies/buddies_screen.dart';
 import 'account_dialog.dart';
 import 'dashboard_screen.dart';
@@ -33,7 +34,7 @@ class _AppShellState extends State<AppShell> {
       case 1: return const DocumentsScreen();
       case 2: return const BillsScreen();
       case 3: return const TasksScreen();
-      case 4: return const KhataScreen();
+      case 4: return const BuddyKhataScreen();
       case 5: return const BuddiesScreen();
       case 6: return const SharedDesksScreen();
       default: return DashboardScreen(onNavigate: (value) => setState(() => index = value));

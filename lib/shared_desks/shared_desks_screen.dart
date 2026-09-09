@@ -65,7 +65,7 @@ class _SharedDesksScreenState extends State<SharedDesksScreen> {
               TextField(controller: name, autofocus: true, decoration: const InputDecoration(labelText: 'Desk name')),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
-                value: type,
+                initialValue: type,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: const [
                   DropdownMenuItem(value: 'family', child: Text('Family')),
@@ -303,7 +303,7 @@ class _SharedDesksScreenState extends State<SharedDesksScreen> {
     switch (role) {
       case 'owner': return 'Owner · full control';
       case 'admin': return 'Admin · can manage members and invites';
-      case 'viewer': return 'Viewer · read-only participant';
+      case 'viewer': return 'Viewer · cannot create desk-linked content';
       default: return 'Member · normal participant';
     }
   }

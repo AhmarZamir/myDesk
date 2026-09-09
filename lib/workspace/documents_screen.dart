@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/workspace_service.dart';
 
 class DocumentsScreen extends StatefulWidget {
@@ -316,6 +317,114 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     }
   }
 
+  Future<void> _previewDocument(Map<String, dynamic> document) async {
+    try {
+      final url = await _service.documentUrl('${document['storage_path']}');
+      if (!mounted) return;
+
+      final fileName = '${document['storage_path']}'.split('/').last.toLowerCase();
+      final isImage = fileName.endsWith('.jpg') ||
+          fileName.endsWith('.jpeg') ||
+          fileName.endsWith('.png') ||
+          fileName.endsWith('.webp') ||
+          fileName.endsWith('.gif');
+
+      await showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          insetPadding: const EdgeInsets.all(18),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900, maxHeight: 760),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${document['title']}',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: isImage
+                        ? Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            padding: const EdgeInsets.all(12),
+                            child: InteractiveViewer(
+                              minScale: 0.5,
+                              maxScale: 5,
+                              child: Center(
+                                child: Image.network(
+                                  url,
+                                  fit: BoxFit.contain,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return const Center(child: CircularProgressIndicator());
+                                  },
+                                  errorBuilder: (context, error, stackTrace) => const Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.broken_image_outlined, size: 48),
+                                        SizedBox(height: 8),
+                                        Text('Could not render this image.'),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            padding: const EdgeInsets.all(28),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.insert_drive_file_outlined, size: 62),
+                                const SizedBox(height: 14),
+                                const Text('Preview is not available for this file type.', textAlign: TextAlign.center),
+                                const SizedBox(height: 18),
+                                FilledButton.icon(
+                                  onPressed: () async {
+                                    final uri = Uri.parse(url);
+                                    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open file.')));
+                                    }
+                                  },
+                                  icon: const Icon(Icons.open_in_new),
+                                  label: const Text('Open file'),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open file: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -360,29 +469,14 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                     leading: CircleAvatar(child: Icon(_iconFor('${doc['category']}'))),
                     title: Text('${doc['title']}'),
                     subtitle: Text('${doc['category']} · ${_visibilityLabel(visibility)}'),
+                    onTap: () => _previewDocument(doc),
                     trailing: Wrap(
                       spacing: 4,
                       children: [
                         IconButton(
-                          tooltip: 'Open',
-                          onPressed: () async {
-                            try {
-                              final url = await _service.documentUrl('${doc['storage_path']}');
-                              if (mounted) {
-                                showDialog<void>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: Text('${doc['title']}'),
-                                    content: SelectableText(url),
-                                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open file: $e')));
-                            }
-                          },
-                          icon: const Icon(Icons.open_in_new),
+                          tooltip: 'Preview',
+                          onPressed: () => _previewDocument(doc),
+                          icon: const Icon(Icons.visibility_outlined),
                         ),
                         if (isOwner)
                           IconButton(tooltip: 'Manage access', onPressed: () => _manageAccess(doc), icon: const Icon(Icons.manage_accounts_outlined)),

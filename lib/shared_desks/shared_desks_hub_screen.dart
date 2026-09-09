@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/desk_service.dart';
 import '../services/workspace_service.dart';
+import '../services/buddy_service.dart';
 
 class SharedDesksHubScreen extends StatefulWidget {
   const SharedDesksHubScreen({super.key});
@@ -87,10 +88,15 @@ class SharedDeskDashboard extends StatefulWidget {
 }
 
 class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
-  final _deskService = DeskService(); final _workspace = WorkspaceService(); late Future<List<dynamic>> _future; String section = 'overview';
+  final _deskService = DeskService();
+  final _workspace = WorkspaceService();
+  final _buddyService = BuddyService();
+  late Future<List<dynamic>> _future;
+  String section = 'overview';
   String get id => '${widget.desk['id']}';
+
   @override void initState() { super.initState(); _reload(); }
-  void _reload() => _future = Future.wait([_deskService.fetchDeskMembers(id), _workspace.documents(), _workspace.bills(), _workspace.tasks()]);
+  void _reload() => _future = Future.wait([_deskService.fetchDeskMembers(id), _workspace.documents(), _workspace.bills(), _workspace.tasks(), _buddyService.buddies()]);
   void _refresh() => setState(_reload);
 
   Future<void> _memberAction(Map<String,dynamic> member, String action) async {
@@ -99,6 +105,16 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
       else await _deskService.setMemberRole(deskId: id, userId: '${member['user_id']}', role: action);
       _refresh();
     } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update member: $e'))); }
+  }
+
+  Future<void> _addBuddy(Map<String,dynamic> member) async {
+    try {
+      await _buddyService.addSharedDeskMemberAsBuddy(deskId: id, userId: '${member['user_id']}');
+      _refresh();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${member['full_name']} added to your Buddies.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add Buddy: $e')));
+    }
   }
 
   @override Widget build(BuildContext context) => Scaffold(
@@ -110,7 +126,10 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
       final docs = List<Map<String,dynamic>>.from(snap.data![1] as List).where((e) => '${e['desk_id']}' == id).toList();
       final bills = List<Map<String,dynamic>>.from(snap.data![2] as List).where((e) => '${e['desk_id']}' == id).toList();
       final tasks = List<Map<String,dynamic>>.from(snap.data![3] as List).where((e) => '${e['desk_id']}' == id).toList();
-      final openBills = bills.where((e) => e['status'] != 'paid').length; final openTasks = tasks.where((e) => e['status'] != 'completed').length;
+      final buddies = List<Map<String,dynamic>>.from(snap.data![4] as List);
+      final buddyIds = buddies.map((b) => '${b['user_id']}').toSet();
+      final openBills = bills.where((e) => e['status'] != 'paid').length;
+      final openTasks = tasks.where((e) => e['status'] != 'completed').length;
       return ListView(padding: const EdgeInsets.all(24), children: [
         Card(child: Padding(padding: const EdgeInsets.all(20), child: Wrap(spacing: 20, runSpacing: 16, children: [
           _LargeStat(icon: Icons.people_outline, value: members.length, label: 'Members'), _LargeStat(icon: Icons.description_outlined, value: docs.length, label: 'Documents'), _LargeStat(icon: Icons.receipt_long_outlined, value: openBills, label: 'Open bills'), _LargeStat(icon: Icons.task_alt, value: openTasks, label: 'Tasks to do'),
@@ -123,8 +142,20 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
           _Section(title: 'Recently shared content', items: docs.take(5).map((e) => ListTile(leading: const Icon(Icons.description_outlined), title: Text('${e['title']}'), subtitle: Text('${e['category']} · ${e['visibility']}'))).toList()),
         ],
         if (section == 'members') ...members.map((m) {
-          final role = '${m['role']}'; final isMe = m['is_me'] == true; final canManage = widget.desk['role'] == 'owner' || widget.desk['role'] == 'admin';
-          return Card(child: ListTile(leading: _Avatar(name: '${m['full_name']}', url: m['avatar_url']?.toString()), title: Text('${m['full_name']}${isMe ? ' (You)' : ''}', style: const TextStyle(fontWeight: FontWeight.w800)), subtitle: Text(role), trailing: (!isMe && canManage && role != 'owner') ? PopupMenuButton<String>(onSelected: (v) => _memberAction(m, v), itemBuilder: (_) => [if (widget.desk['role'] == 'owner') ...const [PopupMenuItem(value: 'admin', child: Text('Make admin')), PopupMenuItem(value: 'member', child: Text('Make member')), PopupMenuItem(value: 'viewer', child: Text('Make viewer'))], const PopupMenuItem(value: 'remove', child: Text('Remove member'))]) : null));
+          final role = '${m['role']}';
+          final isMe = m['is_me'] == true;
+          final isBuddy = buddyIds.contains('${m['user_id']}');
+          final canManage = widget.desk['role'] == 'owner' || widget.desk['role'] == 'admin';
+          return Card(child: ListTile(
+            leading: _Avatar(name: '${m['full_name']}', url: m['avatar_url']?.toString()),
+            title: Text('${m['full_name']}${isMe ? ' (You)' : ''}', style: const TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: Text(isMe ? role : isBuddy ? '$role · Buddy' : '$role · Shared Desk member'),
+            trailing: isMe ? null : Wrap(spacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              if (!isBuddy) IconButton(tooltip: 'Add as Buddy', icon: const Icon(Icons.person_add_alt_1), onPressed: () => _addBuddy(m)),
+              if (isBuddy) const Tooltip(message: 'Already a Buddy', child: Icon(Icons.people_alt_outlined)),
+              if (canManage && role != 'owner') PopupMenuButton<String>(onSelected: (v) => _memberAction(m, v), itemBuilder: (_) => [if (widget.desk['role'] == 'owner') ...const [PopupMenuItem(value: 'admin', child: Text('Make admin')), PopupMenuItem(value: 'member', child: Text('Make member')), PopupMenuItem(value: 'viewer', child: Text('Make viewer'))], const PopupMenuItem(value: 'remove', child: Text('Remove member'))]),
+            ]),
+          ));
         }),
         if (section == 'documents') ..._simpleCards(docs, Icons.description_outlined, (e) => '${e['title']}', (e) => '${e['category']} · ${e['visibility']}'),
         if (section == 'bills') ..._simpleCards(bills, Icons.receipt_long_outlined, (e) => '${e['title']} · Rs. ${e['amount']}', (e) => '${e['status']}${e['due_date'] != null ? ' · due ${e['due_date']}' : ''}'),

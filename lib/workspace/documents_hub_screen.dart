@@ -1,7 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../services/workspace_service.dart';
-import 'document_preview_screen.dart';
+import 'document_category_screen.dart';
 
 class DocumentsHubScreen extends StatefulWidget {
   const DocumentsHubScreen({super.key});
@@ -14,7 +14,6 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
   final _service = WorkspaceService();
   late Future<List<dynamic>> _future;
   String _workspaceFilter = 'all';
-  String _categoryFilter = 'all';
 
   static const _categories = <String, _DocumentCategory>{
     'id': _DocumentCategory('IDs', Icons.badge_outlined, Color(0xFF2F80FF), Color(0xFF102A52)),
@@ -48,7 +47,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
     final desks = List<Map<String, dynamic>>.from(results[0]).where((d) => d['role'] != 'viewer').toList();
     final buddies = List<Map<String, dynamic>>.from(results[1]);
     final title = TextEditingController(text: file.name);
-    String category = _categoryFilter == 'all' ? 'other' : _categoryFilter;
+    String category = 'other';
     String visibility = 'private';
     String? deskId;
     DateTime? expiresAt;
@@ -113,8 +112,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
                     items: desks.map((d) => DropdownMenuItem<String>(value: '${d['id']}', child: Text('${d['name']}'))).toList(),
                     onChanged: (v) => setLocal(() => deskId = v),
                   ),
-                  if (desks.isEmpty)
-                    const Padding(padding: EdgeInsets.only(top: 8), child: Text('You do not have a writable Shared Desk.')),
+                  if (desks.isEmpty) const Padding(padding: EdgeInsets.only(top: 8), child: Text('You do not have a writable Shared Desk.')),
                 ],
                 if (visibility == 'custom') ...[
                   const SizedBox(height: 14),
@@ -122,8 +120,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
                   const SizedBox(height: 4),
                   Text('Selected people only includes your myDesk Buddies.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 8),
-                  if (buddies.isEmpty)
-                    const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No Buddies yet. Add someone as a Buddy first.'))),
+                  if (buddies.isEmpty) const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No Buddies yet. Add someone as a Buddy first.'))),
                   ...buddies.map((b) {
                     final id = '${b['user_id']}';
                     return CheckboxListTile(
@@ -176,140 +173,6 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
     title.dispose();
   }
 
-  Future<void> _manageAccess(Map<String, dynamic> doc) async {
-    final results = await Future.wait([_service.desks(), _service.buddies(), _service.documentRecipientIds('${doc['id']}')]);
-    if (!mounted) return;
-    final desks = List<Map<String, dynamic>>.from(results[0]).where((d) => d['role'] != 'viewer').toList();
-    final buddies = List<Map<String, dynamic>>.from(results[1]);
-    String visibility = '${doc['visibility']}';
-    String? deskId = doc['desk_id']?.toString();
-    final selected = Set<String>.from(List<String>.from(results[2]));
-    final buddyIds = buddies.map((b) => '${b['user_id']}').toSet();
-    selected.removeWhere((id) => !buddyIds.contains(id));
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: Text('Manage access · ${doc['title']}'),
-          content: SizedBox(
-            width: 540,
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'private', label: Text('Only me')),
-                    ButtonSegment(value: 'desk', label: Text('Whole desk')),
-                    ButtonSegment(value: 'custom', label: Text('Selected people')),
-                  ],
-                  selected: {visibility},
-                  onSelectionChanged: (v) => setLocal(() {
-                    visibility = v.first;
-                    selected.clear();
-                    if (visibility != 'desk') deskId = null;
-                  }),
-                ),
-                if (visibility == 'desk') ...[
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    initialValue: deskId,
-                    decoration: const InputDecoration(labelText: 'Shared Desk'),
-                    items: desks.map((d) => DropdownMenuItem<String>(value: '${d['id']}', child: Text('${d['name']}'))).toList(),
-                    onChanged: (v) => setLocal(() => deskId = v),
-                  ),
-                ],
-                if (visibility == 'custom') ...[
-                  const SizedBox(height: 14),
-                  const Text('Choose Buddies', style: TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 6),
-                  ...buddies.map((b) {
-                    final id = '${b['user_id']}';
-                    return CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: selected.contains(id),
-                      secondary: _Avatar(name: '${b['full_name']}', url: b['avatar_url']?.toString()),
-                      title: Text('${b['full_name']}'),
-                      onChanged: (checked) => setLocal(() => checked == true ? selected.add(id) : selected.remove(id)),
-                    );
-                  }),
-                ],
-              ]),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () {
-                if (visibility == 'desk' && deskId == null) return;
-                if (visibility == 'custom' && selected.isEmpty) return;
-                Navigator.pop(context, true);
-              },
-              child: const Text('Save access'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (ok == true) {
-      try {
-        await _service.updateDocumentAccess(
-          documentId: '${doc['id']}',
-          visibility: visibility,
-          deskId: visibility == 'desk' ? deskId : null,
-          recipientIds: selected.toList(),
-        );
-        _refresh();
-        _message('Access updated.');
-      } catch (e) {
-        _message('Could not update access: $e');
-      }
-    }
-  }
-
-  Future<void> _open(Map<String, dynamic> doc) async {
-    try {
-      final path = '${doc['storage_path']}';
-      final url = await _service.documentUrl(path);
-      if (!mounted) return;
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => DocumentPreviewScreen(title: '${doc['title']}', url: url, storagePath: path),
-        ),
-      );
-    } catch (e) {
-      _message('Could not open file: $e');
-    }
-  }
-
-  Future<void> _delete(Map<String, dynamic> doc) async {
-    final ok = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Delete document?'),
-            content: Text('“${doc['title']}” will be permanently removed.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!ok) return;
-    try {
-      await _service.deleteDocument('${doc['id']}', '${doc['storage_path']}');
-      _refresh();
-      _message('Document deleted.');
-    } catch (e) {
-      _message('Could not delete document: $e');
-    }
-  }
-
   void _message(String text) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
@@ -319,6 +182,28 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
         if (_workspaceFilter == 'personal') return d['desk_id'] == null;
         return '${d['desk_id']}' == _workspaceFilter;
       }).toList();
+
+  Future<void> _openCategory({
+    required String key,
+    required _DocumentCategory category,
+    required String workspaceLabel,
+  }) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DocumentCategoryScreen(
+          categoryKey: key,
+          categoryLabel: category.label,
+          categoryIcon: category.icon,
+          foreground: category.foreground,
+          background: category.background,
+          workspaceFilter: _workspaceFilter,
+          workspaceLabel: workspaceLabel,
+        ),
+      ),
+    );
+    _refresh();
+  }
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -332,7 +217,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Documents & Vault', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 5),
-                Text('Choose a space, then open a document category.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                Text('Choose a space, then open a category to see its documents.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ]),
               FilledButton.icon(onPressed: _upload, icon: const Icon(Icons.upload_file), label: const Text('Upload document')),
             ],
@@ -358,7 +243,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
               if (!workspaceFilters.containsKey(_workspaceFilter)) _workspaceFilter = 'all';
 
               final inWorkspace = _workspaceDocs(docs);
-              final visible = inWorkspace.where((d) => _categoryFilter == 'all' || '${d['category']}' == _categoryFilter).toList();
+              final workspaceLabel = workspaceFilters[_workspaceFilter] ?? 'All';
               int countFor(String category) => inWorkspace.where((d) => '${d['category']}' == category).length;
 
               return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -389,20 +274,11 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
                       childAspectRatio: columns == 2 ? 2.55 : 4.0,
                       children: _categories.entries.map((entry) {
                         final category = entry.value;
-                        final selected = _categoryFilter == entry.key;
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          decoration: BoxDecoration(
-                            color: selected ? Theme.of(context).colorScheme.primary.withValues(alpha: .08) : Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant,
-                              width: selected ? 1.5 : 1,
-                            ),
-                          ),
+                        final count = countFor(entry.key);
+                        return Card(
                           child: InkWell(
                             borderRadius: BorderRadius.circular(20),
-                            onTap: () => setState(() => _categoryFilter = selected ? 'all' : entry.key),
+                            onTap: () => _openCategory(key: entry.key, category: category, workspaceLabel: workspaceLabel),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               child: Row(children: [
@@ -420,14 +296,11 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
                                     children: [
                                       Text(category.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                                       const SizedBox(height: 4),
-                                      Text(
-                                        '${countFor(entry.key)} ${countFor(entry.key) == 1 ? 'document' : 'documents'}',
-                                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                                      ),
+                                      Text('$count ${count == 1 ? 'document' : 'documents'}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                                     ],
                                   ),
                                 ),
-                                if (selected) Icon(Icons.check_circle_rounded, color: Theme.of(context).colorScheme.primary),
+                                const Icon(Icons.chevron_right_rounded),
                               ]),
                             ),
                           ),
@@ -436,75 +309,11 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
                     );
                   }),
                 ),
-                const SizedBox(height: 26),
-                Row(children: [
-                  Expanded(
-                    child: Text(
-                      _categoryFilter == 'all' ? 'All documents' : _categories[_categoryFilter]!.label,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                  if (_categoryFilter != 'all')
-                    TextButton.icon(
-                      onPressed: () => setState(() => _categoryFilter = 'all'),
-                      icon: const Icon(Icons.close, size: 17),
-                      label: const Text('Show all'),
-                    ),
-                  const SizedBox(width: 6),
-                  Text('${visible.length}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                ]),
-                const SizedBox(height: 10),
-                if (visible.isEmpty)
-                  const Card(child: Padding(padding: EdgeInsets.all(34), child: Center(child: Text('No documents in this category and space.')))),
-                ...visible.map((doc) {
-                  final desk = desks.where((d) => '${d['id']}' == '${doc['desk_id']}').toList();
-                  final workspace = doc['desk_id'] == null ? 'Personal' : (desk.isEmpty ? 'Shared Desk' : '${desk.first['name']}');
-                  final mine = doc['owner_id'] == _service.currentUserId;
-                  final categoryKey = '${doc['category']}';
-                  final category = _categories[categoryKey] ?? _categories['other']!;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: ListTile(
-                      leading: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(color: category.background, borderRadius: BorderRadius.circular(13)),
-                        child: Icon(category.icon, color: category.foreground),
-                      ),
-                      title: Text('${doc['title']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text([
-                        workspace,
-                        category.label,
-                        _visibility('${doc['visibility']}'),
-                        if (doc['expires_at'] != null) 'Expires ${_date(doc['expires_at'])}',
-                      ].join(' · ')),
-                      onTap: () => _open(doc),
-                      trailing: PopupMenuButton<String>(
-                        tooltip: 'Document actions',
-                        onSelected: (value) async {
-                          if (value == 'open') await _open(doc);
-                          if (value == 'access') await _manageAccess(doc);
-                          if (value == 'delete') await _delete(doc);
-                        },
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(value: 'open', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.visibility_outlined), title: Text('Preview'))),
-                          if (mine)
-                            const PopupMenuItem(value: 'access', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.manage_accounts_outlined), title: Text('Manage access'))),
-                          if (mine) const PopupMenuDivider(),
-                          if (mine)
-                            const PopupMenuItem(value: 'delete', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.delete_outline), title: Text('Delete'))),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
               ]);
             },
           ),
         ],
       );
-
-  String _visibility(String v) => v == 'desk' ? 'Desk members' : v == 'custom' ? 'Selected Buddies' : 'Private';
 
   static String _date(dynamic value) {
     final d = value is DateTime ? value : DateTime.tryParse('${value ?? ''}');
@@ -518,6 +327,7 @@ class _DocumentCategory {
   final IconData icon;
   final Color foreground;
   final Color background;
+
   const _DocumentCategory(this.label, this.icon, this.foreground, this.background);
 }
 

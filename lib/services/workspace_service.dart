@@ -130,7 +130,16 @@ class WorkspaceService {
     final cleanTitle = title.trim();
     if (cleanTitle.isEmpty) throw ArgumentError('Task title is required.');
     if (!const {'low', 'medium', 'high'}.contains(priority)) throw ArgumentError('Invalid priority.');
-    await _db.from('tasks').insert({'creator_id': _uid, 'assignee_id': assigneeId ?? _uid, 'desk_id': deskId, 'title': cleanTitle, 'description': description?.trim(), 'due_date': dueDate?.toIso8601String(), 'priority': priority, 'status': 'pending'});
+    final recipientId = assigneeId ?? _uid;
+    final inserted = await _db.from('tasks').insert({'creator_id': _uid, 'assignee_id': recipientId, 'desk_id': deskId, 'title': cleanTitle, 'description': description?.trim(), 'due_date': dueDate?.toIso8601String(), 'priority': priority, 'status': 'pending'}).select('id').single();
+
+    if (recipientId != _uid) {
+      try {
+        await _db.functions.invoke('send-task-assignment-email', body: {'task_id': inserted['id']});
+      } catch (_) {
+        // Email is a secondary notification. The task remains valid even if delivery fails.
+      }
+    }
   }
 
   Future<void> setTaskStatus(String id, String status) {

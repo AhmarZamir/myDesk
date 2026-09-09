@@ -58,8 +58,12 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _openAccount() async {
-    await showAccountDialog(context);
-    if (mounted) setState(() => _profile = _auth.fetchProfile());
+    final updated = await showAccountDialog(context);
+    if (mounted) {
+      setState(() {
+        _profile = Future.value(updated);
+      });
+    }
   }
 
   Future<void> _signOut() async {
@@ -131,10 +135,19 @@ class _AppShellState extends State<AppShell> {
 
   Widget _avatar(String? url, String name, {double radius = 18}) {
     if (url != null && url.isNotEmpty) {
-      return CircleAvatar(radius: radius, backgroundImage: NetworkImage(url), backgroundColor: const Color(0xFF10192B));
+      return CircleAvatar(
+        key: ValueKey(url),
+        radius: radius,
+        backgroundImage: NetworkImage(url),
+        backgroundColor: const Color(0xFF10192B),
+      );
     }
     final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
-    return CircleAvatar(radius: radius, backgroundColor: const Color(0xFF1473E6), child: Text(initial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)));
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: const Color(0xFF1473E6),
+      child: Text(initial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+    );
   }
 
   Widget _brandIcon() => Container(
@@ -173,10 +186,6 @@ class _AppShellState extends State<AppShell> {
                   extended: constraints.maxWidth >= 1160,
                   selectedIndex: index,
                   onDestinationSelected: _selectIndex,
-                  leading: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 18, 14, 26),
-                    child: constraints.maxWidth >= 1160 ? _brand() : _brandIcon(),
-                  ),
                   destinations: List.generate(
                     _labels.length,
                     (i) => NavigationRailDestination(

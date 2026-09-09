@@ -33,34 +33,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           const Text('Your Desk', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
           const SizedBox(height: 5),
-          const Text('A live view of what you own, what is assigned to you, and what needs attention.'),
+          Text('What is yours, what was assigned to you, and what needs attention.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 24),
           FutureBuilder<Map<String, dynamic>>(
             future: _future,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()));
-              }
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()));
               if (snapshot.hasError) {
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(28),
-                    child: Column(children: [
-                      const Icon(Icons.cloud_off_outlined, size: 42),
-                      const SizedBox(height: 10),
-                      const Text('Could not load your dashboard', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 6),
-                      Text('${snapshot.error}', textAlign: TextAlign.center),
-                      const SizedBox(height: 14),
-                      OutlinedButton.icon(onPressed: _reload, icon: const Icon(Icons.refresh), label: const Text('Try again')),
-                    ]),
-                  ),
-                );
+                return Card(child: Padding(padding: const EdgeInsets.all(28), child: Column(children: [
+                  const Icon(Icons.cloud_off_outlined, size: 42),
+                  const SizedBox(height: 10),
+                  const Text('Could not load your dashboard', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  Text('${snapshot.error}', textAlign: TextAlign.center),
+                  const SizedBox(height: 14),
+                  OutlinedButton.icon(onPressed: _reload, icon: const Icon(Icons.refresh), label: const Text('Try again')),
+                ])));
               }
 
               final data = snapshot.data!;
               final overdue = List<Map<String, dynamic>>.from(data['overdue_bills'] as List);
               final dueTasks = List<Map<String, dynamic>>.from(data['due_soon_tasks'] as List);
+              final assigned = List<Map<String, dynamic>>.from(data['assigned_tasks'] as List);
               final expiring = List<Map<String, dynamic>>.from(data['expiring_documents'] as List);
 
               return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -78,10 +72,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       _MetricCard(icon: Icons.receipt_long_outlined, label: 'Unpaid bills', value: '${data['unpaid_bills']}', onTap: () => widget.onNavigate(2)),
                       _MetricCard(icon: Icons.task_alt_outlined, label: 'Pending tasks', value: '${data['pending_tasks']}', onTap: () => widget.onNavigate(3)),
                       _MetricCard(icon: Icons.account_balance_wallet_outlined, label: 'Open Khata', value: '${data['open_khata']}', onTap: () => widget.onNavigate(4)),
-                      _MetricCard(icon: Icons.groups_outlined, label: 'Shared Desks', value: '${data['desks']}', onTap: () => widget.onNavigate(5)),
+                      _MetricCard(icon: Icons.groups_outlined, label: 'Shared Desks', value: '${data['desks']}', onTap: () => widget.onNavigate(6)),
                     ],
                   );
                 }),
+                if (assigned.isNotEmpty) ...[
+                  const SizedBox(height: 28),
+                  Row(children: [
+                    const Expanded(child: Text('Assigned to you', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))),
+                    TextButton(onPressed: () => widget.onNavigate(3), child: const Text('View all')),
+                  ]),
+                  const SizedBox(height: 8),
+                  ...assigned.take(5).map((task) => _AttentionTile(
+                    icon: Icons.assignment_ind_outlined,
+                    title: '${task['title']}',
+                    subtitle: '${_status(task['status'])}${task['due_date'] != null ? ' · due ${_formatDate(task['due_date'])}' : ''}',
+                    action: 'Open task',
+                    onTap: () => widget.onNavigate(3),
+                  )),
+                ],
                 const SizedBox(height: 26),
                 Row(children: [
                   const Expanded(child: Text('Needs attention', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))),
@@ -89,34 +98,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ]),
                 const SizedBox(height: 10),
                 if (overdue.isEmpty && dueTasks.isEmpty && expiring.isEmpty)
-                  const Card(
-                    child: ListTile(
-                      leading: CircleAvatar(child: Icon(Icons.check_circle_outline)),
-                      title: Text('You are caught up', style: TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text('No overdue bills, upcoming tasks, or documents expiring in the next 30 days.'),
-                    ),
-                  ),
-                ...overdue.take(4).map((bill) => _AttentionTile(
-                      icon: Icons.warning_amber_rounded,
-                      title: '${bill['title']}',
-                      subtitle: 'Bill overdue · Rs. ${bill['amount']} · due ${bill['due_date']}',
-                      action: 'View bills',
-                      onTap: () => widget.onNavigate(2),
-                    )),
-                ...dueTasks.take(4).map((task) => _AttentionTile(
-                      icon: Icons.schedule,
-                      title: '${task['title']}',
-                      subtitle: 'Task due soon · ${_formatDate(task['due_date'])}${task['assignee_name'] != null ? ' · ${task['assignee_name']}' : ''}',
-                      action: 'View tasks',
-                      onTap: () => widget.onNavigate(3),
-                    )),
-                ...expiring.take(4).map((doc) => _AttentionTile(
-                      icon: Icons.event_busy_outlined,
-                      title: '${doc['title']}',
-                      subtitle: 'Document expires ${_formatDate(doc['expires_at'])}',
-                      action: 'View document',
-                      onTap: () => widget.onNavigate(1),
-                    )),
+                  const Card(child: ListTile(
+                    leading: CircleAvatar(child: Icon(Icons.check_circle_outline)),
+                    title: Text('You are caught up', style: TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text('No overdue bills, upcoming tasks, or documents expiring in the next 30 days.'),
+                  )),
+                ...overdue.take(4).map((bill) => _AttentionTile(icon: Icons.warning_amber_rounded, title: '${bill['title']}', subtitle: 'Bill overdue · Rs. ${bill['amount']} · due ${bill['due_date']}', action: 'View bills', onTap: () => widget.onNavigate(2))),
+                ...dueTasks.take(4).map((task) => _AttentionTile(icon: Icons.schedule, title: '${task['title']}', subtitle: 'Task due soon · ${_formatDate(task['due_date'])}${task['assignee_name'] != null ? ' · ${task['assignee_name']}' : ''}', action: 'View tasks', onTap: () => widget.onNavigate(3))),
+                ...expiring.take(4).map((doc) => _AttentionTile(icon: Icons.event_busy_outlined, title: '${doc['title']}', subtitle: 'Document expires ${_formatDate(doc['expires_at'])}', action: 'View document', onTap: () => widget.onNavigate(1))),
               ]);
             },
           ),
@@ -131,6 +120,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final local = parsed.toLocal();
     return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
   }
+
+  String _status(dynamic value) => '${value ?? 'pending'}'.replaceAll('_', ' ');
 }
 
 class _MetricCard extends StatelessWidget {
@@ -141,24 +132,22 @@ class _MetricCard extends StatelessWidget {
   const _MetricCard({required this.icon, required this.label, required this.value, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-            CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primaryContainer, child: Icon(icon)),
-            const Spacer(),
-            Text(value, style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 2),
-            Text(label),
-          ]),
-        ),
+  Widget build(BuildContext context) => Card(
+    child: InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+          CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primaryContainer, child: Icon(icon, color: Theme.of(context).colorScheme.primary)),
+          const Spacer(),
+          Text(value, style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 2),
+          Text(label),
+        ]),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _AttentionTile extends StatelessWidget {
@@ -170,16 +159,14 @@ class _AttentionTile extends StatelessWidget {
   const _AttentionTile({required this.icon, required this.title, required this.subtitle, required this.action, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: CircleAvatar(child: Icon(icon)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(subtitle),
-        trailing: TextButton(onPressed: onTap, child: Text(action)),
-        onTap: onTap,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(bottom: 10),
+    child: ListTile(
+      leading: CircleAvatar(child: Icon(icon)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Text(subtitle),
+      trailing: TextButton(onPressed: onTap, child: Text(action)),
+      onTap: onTap,
+    ),
+  );
 }

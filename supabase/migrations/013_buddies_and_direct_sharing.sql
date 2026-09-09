@@ -182,6 +182,30 @@ with check (
   )
 );
 
+-- Override the earlier desk-only access helper so a direct Buddy grant works
+-- without weakening the rule for Shared Desk recipients.
+create or replace function public.has_document_access(p_document_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.document_access da
+    join public.documents d on d.id = da.document_id
+    where da.document_id = p_document_id
+      and da.user_id = auth.uid()
+      and (
+        (d.desk_id is not null and public.is_user_desk_member(d.desk_id, auth.uid()))
+        or (d.desk_id is null and public.are_buddies(d.owner_id, auth.uid()))
+      )
+  );
+$$;
+
+grant execute on function public.has_document_access(uuid) to authenticated;
+
 -- Khata can optionally be linked to a Buddy. The creator owns edits; the Buddy
 -- receives read-only visibility of the same ledger entry.
 alter table public.khata_entries

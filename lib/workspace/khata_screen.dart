@@ -118,7 +118,7 @@ class _BuddyKhataScreenState extends State<BuddyKhataScreen> {
                             const Icon(Icons.chevron_right),
                           ]),
                           const Spacer(),
-                          Text(net >= 0 ? 'They owe you' : 'You owe them', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          Text(net > 0 ? 'They owe you' : net < 0 ? 'You owe them' : 'Settled', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                           const SizedBox(height: 4),
                           Text(
                             'Rs. ${net.abs().toStringAsFixed(2)}',
@@ -267,10 +267,13 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
             final value = double.tryParse('${item['amount']}') ?? 0;
             if (receivableForMe) receivable += value; else payable += value;
           }
+          final net = receivable - payable;
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
             children: [
+              _NetBalanceBar(buddyName: buddyName, net: net),
+              const SizedBox(height: 14),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -325,6 +328,52 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+class _NetBalanceBar extends StatelessWidget {
+  final String buddyName;
+  final double net;
+  const _NetBalanceBar({required this.buddyName, required this.net});
+
+  @override
+  Widget build(BuildContext context) {
+    final settled = net.abs() < 0.005;
+    final positive = net > 0;
+    final icon = settled ? Icons.check_circle_outline : positive ? Icons.call_received_rounded : Icons.call_made_rounded;
+    final message = settled
+        ? 'Settled — balance is Rs. 0.00'
+        : positive
+            ? '$buddyName owes you Rs. ${net.abs().toStringAsFixed(2)}'
+            : 'You owe $buddyName Rs. ${net.abs().toStringAsFixed(2)}';
+    final helper = settled
+        ? 'There is no outstanding balance between you and $buddyName.'
+        : positive
+            ? 'This is your current net receivable after all open inflow and outflow entries.'
+            : 'This is your current net payable after all open inflow and outflow entries.';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: settled ? Theme.of(context).colorScheme.surfaceContainerHighest : Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: settled ? Theme.of(context).colorScheme.outlineVariant : Theme.of(context).colorScheme.primary.withValues(alpha: .45)),
+      ),
+      child: Row(children: [
+        CircleAvatar(
+          backgroundColor: settled ? Theme.of(context).colorScheme.surface : Theme.of(context).colorScheme.primary,
+          child: Icon(icon, color: settled ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onPrimary),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(message, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 3),
+            Text(helper, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ]),
+        ),
+      ]),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/workspace_service.dart';
 import 'document_preview_screen.dart';
 
@@ -59,6 +60,34 @@ class _DocumentCategoryScreenState extends State<DocumentCategoryScreen> {
     } catch (e) {
       _message('Could not open file: $e');
     }
+  }
+
+  Future<void> _download(Map<String, dynamic> doc) async {
+    try {
+      final path = '${doc['storage_path']}';
+      final signedUrl = await _service.documentUrl(path);
+      final uri = Uri.parse(signedUrl);
+      final ext = _extension(path);
+      final rawTitle = '${doc['title']}'.trim();
+      final safeTitle = rawTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final fileName = ext.isEmpty || safeTitle.toLowerCase().endsWith('.$ext')
+          ? (safeTitle.isEmpty ? 'document' : safeTitle)
+          : '${safeTitle.isEmpty ? 'document' : safeTitle}.$ext';
+      final downloadUri = uri.replace(queryParameters: {
+        ...uri.queryParameters,
+        'download': fileName,
+      });
+      final opened = await launchUrl(downloadUri, mode: LaunchMode.externalApplication);
+      if (!opened) _message('Could not download this file.');
+    } catch (e) {
+      _message('Could not download file: $e');
+    }
+  }
+
+  String _extension(String path) {
+    final clean = path.toLowerCase().split('?').first;
+    final dot = clean.lastIndexOf('.');
+    return dot == -1 ? '' : clean.substring(dot + 1);
   }
 
   Future<void> _manageAccess(Map<String, dynamic> doc) async {
@@ -258,11 +287,13 @@ class _DocumentCategoryScreenState extends State<DocumentCategoryScreen> {
                     trailing: PopupMenuButton<String>(
                       onSelected: (value) async {
                         if (value == 'open') await _open(doc);
+                        if (value == 'download') await _download(doc);
                         if (value == 'access') await _manageAccess(doc);
                         if (value == 'delete') await _delete(doc);
                       },
                       itemBuilder: (_) => [
                         const PopupMenuItem(value: 'open', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.visibility_outlined), title: Text('Preview'))),
+                        const PopupMenuItem(value: 'download', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.download_rounded), title: Text('Download'))),
                         if (mine) const PopupMenuItem(value: 'access', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.manage_accounts_outlined), title: Text('Manage access'))),
                         if (mine) const PopupMenuDivider(),
                         if (mine) const PopupMenuItem(value: 'delete', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.delete_outline), title: Text('Delete'))),

@@ -15,6 +15,11 @@ class WorkspaceService {
     return List<Map<String, dynamic>>.from(data);
   }
 
+  Future<List<Map<String, dynamic>>> buddies() async {
+    final data = await _db.rpc('get_my_buddies');
+    return List<Map<String, dynamic>>.from(data as List);
+  }
+
   Future<List<Map<String, dynamic>>> desks() async {
     final data = await _db.rpc('get_my_desks');
     return List<Map<String, dynamic>>.from(data as List);

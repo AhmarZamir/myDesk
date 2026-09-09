@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/desk_service.dart';
 import '../services/workspace_service.dart';
 import '../services/buddy_service.dart';
+import '../workspace/document_preview_screen.dart';
 import 'shared_desk_actions.dart';
 
 class SharedDesksHubScreen extends StatefulWidget {
@@ -126,6 +128,42 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
     if (changed && mounted) _refresh();
   }
 
+  Future<void> _openDocument(Map<String,dynamic> doc) async {
+    try {
+      final path = '${doc['storage_path']}';
+      final url = await _workspace.documentUrl(path);
+      if (!mounted) return;
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => DocumentPreviewScreen(title: '${doc['title']}', url: url, storagePath: path)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open file: $e')));
+    }
+  }
+
+  Future<void> _downloadDocument(Map<String,dynamic> doc) async {
+    try {
+      final path = '${doc['storage_path']}';
+      final signedUrl = await _workspace.documentUrl(path);
+      final uri = Uri.parse(signedUrl);
+      final ext = _extension(path);
+      final rawTitle = '${doc['title']}'.trim();
+      final safeTitle = rawTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final fileName = ext.isEmpty || safeTitle.toLowerCase().endsWith('.$ext')
+          ? (safeTitle.isEmpty ? 'document' : safeTitle)
+          : '${safeTitle.isEmpty ? 'document' : safeTitle}.$ext';
+      final downloadUri = uri.replace(queryParameters: {...uri.queryParameters, 'download': fileName});
+      final opened = await launchUrl(downloadUri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not download this file.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not download file: $e')));
+    }
+  }
+
+  String _extension(String path) {
+    final clean = path.toLowerCase().split('?').first;
+    final dot = clean.lastIndexOf('.');
+    return dot == -1 ? '' : clean.substring(dot + 1);
+  }
+
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text('${widget.desk['name']}', style: const TextStyle(fontWeight: FontWeight.w900)), actions: [if ((widget.desk['invite_code'] ?? '').toString().isNotEmpty) IconButton(tooltip: 'Copy invite code', icon: const Icon(Icons.link), onPressed: () async { await Clipboard.setData(ClipboardData(text: '${widget.desk['invite_code']}')); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invite code copied.'))); })]),
     body: FutureBuilder<List<dynamic>>(future: _future, builder: (context, snap) {
@@ -162,7 +200,13 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
         const SizedBox(height: 18),
         if (section == 'overview') ...[
           _Section(title: 'Tasks to be done', items: tasks.where((e) => e['status'] != 'completed').take(5).map((e) => ListTile(leading: const Icon(Icons.task_alt), title: Text('${e['title']}'), subtitle: Text('${e['status']} · ${e['assignee_name'] ?? 'Unassigned'}'))).toList()),
-          _Section(title: 'Recently shared content', items: docs.take(5).map((e) => ListTile(leading: const Icon(Icons.description_outlined), title: Text('${e['title']}'), subtitle: Text('${e['category']} · ${e['visibility']}'))).toList()),
+          _Section(title: 'Recently shared content', items: docs.take(5).map((e) => ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: Text('${e['title']}'),
+            subtitle: Text('${e['category']} · ${e['visibility']}'),
+            onTap: () => _openDocument(e),
+            trailing: IconButton(tooltip: 'Download', icon: const Icon(Icons.download_rounded), onPressed: () => _downloadDocument(e)),
+          )).toList()),
         ],
         if (section == 'members') ...members.map((m) {
           final role = '${m['role']}';
@@ -180,12 +224,31 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
             ]),
           ));
         }),
-        if (section == 'documents') ..._simpleCards(docs, Icons.description_outlined, (e) => '${e['title']}', (e) => '${e['category']} · ${e['visibility']}'),
+        if (section == 'documents') ..._documentCards(docs),
         if (section == 'bills') ..._simpleCards(bills, Icons.receipt_long_outlined, (e) => '${e['title']} · Rs. ${e['amount']}', (e) => '${e['status']}${e['due_date'] != null ? ' · due ${e['due_date']}' : ''}'),
         if (section == 'tasks') ..._simpleCards(tasks, Icons.task_alt, (e) => '${e['title']}', (e) => '${e['status']} · ${e['priority']} priority · ${e['assignee_name'] ?? 'Unassigned'}'),
       ]);
     }),
   );
+
+  List<Widget> _documentCards(List<Map<String,dynamic>> rows) => rows.isEmpty
+      ? [const Card(child: Padding(padding: EdgeInsets.all(30), child: Center(child: Text('Nothing here yet.'))))]
+      : rows.map((e) => Card(child: ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: Text('${e['title']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: Text('${e['category']} · ${e['visibility']}'),
+            onTap: () => _openDocument(e),
+            trailing: PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'preview') await _openDocument(e);
+                if (value == 'download') await _downloadDocument(e);
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'preview', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.visibility_outlined), title: Text('Preview'))),
+                PopupMenuItem(value: 'download', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.download_rounded), title: Text('Download'))),
+              ],
+            ),
+          ))).toList();
 
   List<Widget> _simpleCards(List<Map<String,dynamic>> rows, IconData icon, String Function(Map<String,dynamic>) title, String Function(Map<String,dynamic>) subtitle) => rows.isEmpty ? [const Card(child: Padding(padding: EdgeInsets.all(30), child: Center(child: Text('Nothing here yet.'))))] : rows.map((e) => Card(child: ListTile(leading: Icon(icon), title: Text(title(e), style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(subtitle(e))))).toList();
 }

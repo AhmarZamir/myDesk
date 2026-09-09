@@ -177,15 +177,6 @@ class _AppShellState extends State<AppShell> {
                     padding: const EdgeInsets.fromLTRB(14, 18, 14, 26),
                     child: constraints.maxWidth >= 1160 ? _brand() : _brandIcon(),
                   ),
-                  trailing: Expanded(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 18),
-                        child: _profileButton(),
-                      ),
-                    ),
-                  ),
                   destinations: List.generate(
                     _labels.length,
                     (i) => NavigationRailDestination(

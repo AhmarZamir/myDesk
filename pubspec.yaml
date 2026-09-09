@@ -13,6 +13,7 @@ dependencies:
   supabase_flutter: ^2.15.4
   file_picker: ^10.3.3
   url_launcher: ^6.3.2
+  pdfrx: ^2.6.1
 
 dev_dependencies:
   flutter_test:

@@ -16,7 +16,7 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  int index = 0;
+  int index = Uri.base.queryParameters['buddy']?.isNotEmpty == true ? 5 : 0;
 
   static const _labels = ['Home', 'Documents', 'Bills', 'Tasks', 'Khata', 'Buddies', 'Shared Desks'];
   static const _icons = [

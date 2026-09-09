@@ -2,15 +2,18 @@
 
 myDesk is a cross-platform personal and shared life workspace built with Flutter for web and mobile from one codebase.
 
-The product is designed around one rule: a user should only see the documents, bills, tasks, desks, Buddies, and responsibilities that are relevant to them.
+The product is designed around one rule: a user should only see the documents, bills, tasks, desks, Buddies, notifications, and responsibilities that are relevant to them.
 
 ## Implemented product flows
 
 - Email/password sign up and sign in
 - Email confirmation feedback
 - Forgot-password and password recovery flow
-- Editable user profile
+- Editable user profile with profile photo/avatar
 - Personal live dashboard with actionable counts
+- Assigned tasks surfaced directly on Home
+- Live unread badges on Tasks and Khata
+- Database-generated notifications for task assignment/status changes and Buddy Khata changes
 - **myDesk Buddies** for reusable person-to-person connections
 - Referral link / referral code Buddy onboarding
 - Direct document sharing with a Buddy without creating a group
@@ -29,6 +32,7 @@ The product is designed around one rule: a user should only see the documents, b
 - Bill creation, assignment, due dates, paid/unpaid state
 - Task creation, assignment, priority, due date, pending/in-progress/completed state
 - Personal and Buddy-aware Khata tracking and settlement
+- Black + electric-blue Material 3 theme across web and mobile
 - Responsive Flutter UI for web and mobile
 - Vercel deployment configuration
 - GitHub Actions checks with `flutter analyze` and `flutter test`
@@ -47,7 +51,7 @@ Flutter Web + Flutter Mobile
                               |
                        Supabase Storage
                               |
- Profiles / Buddies / Shared Desks / Documents / Bills / Tasks / Khata
+ Profiles / Buddies / Notifications / Shared Desks / Documents / Bills / Tasks / Khata
 ```
 
 ## Supabase migrations
@@ -55,14 +59,23 @@ Flutter Web + Flutter Mobile
 For a new project, run every file in `supabase/migrations` in numeric order through:
 
 ```text
-013_buddies_and_direct_sharing.sql
+014_notifications_and_avatars.sql
 ```
 
-If your production database already has `001` through `012`, apply only:
+If your production database already has `001` through `013`, apply only:
 
 ```text
-013_buddies_and_direct_sharing.sql
+014_notifications_and_avatars.sql
 ```
+
+Migration `014` adds:
+
+- `notifications`
+- task assignment/status notification triggers
+- Buddy Khata notification triggers
+- unread notification count helpers
+- Realtime notification publication
+- the `avatars` Storage bucket and owner-only avatar write policies
 
 ## Buddy model
 
@@ -88,7 +101,23 @@ For a Buddy-linked entry:
 - the Buddy receives read-only access;
 - both see the same amount/note/status;
 - the direction is automatically inverted for the Buddy, so “they owe me” for the creator appears as “you owe them” for the Buddy;
-- each user gets their own inflow/outflow summary based on their perspective.
+- each user gets their own inflow/outflow summary based on their perspective;
+- the Buddy receives an unread Khata notification when a shared entry is created/updated.
+
+## Notifications
+
+Notifications are created server-side so clients cannot forge assignment alerts.
+
+- Assigning a task to another user creates a Task notification for that assignee.
+- Changing task status can notify the relevant creator/assignee.
+- Creating/updating Buddy Khata creates a Khata notification for the connected Buddy.
+- Unread counts appear as badges/dots on Tasks and Khata navigation items.
+- Opening the corresponding module marks that category as read.
+- Assigned unfinished tasks also appear directly on Home regardless of whether they have a due date.
+
+## Profile photos
+
+Users can upload JPG, PNG or WebP profile images up to 5 MB from the account dialog. The image is stored under the user's own folder in the `avatars` bucket and the resulting URL is stored in `profiles.avatar_url`.
 
 ## Supabase Auth settings
 
@@ -122,16 +151,16 @@ The build script runs analysis before producing the release web build.
 
 Test with at least three accounts:
 
-1. Account A signs up and creates a Buddy referral link.
-2. Account B opens the referral link, signs in, and both A/B see each other in Buddies.
-3. A directly shares a document with B without a Shared Desk → B sees it; C does not.
-4. A creates a Buddy Khata entry saying B owes A Rs. 1,000 → A sees +Rs. 1,000 and B sees -Rs. 1,000.
-5. B cannot settle/delete A's Buddy Khata entry.
-6. A settles it → both users see the settled state.
-7. A adds B from Buddies into a Shared Desk → B appears as a normal member.
-8. Verify private / whole-desk / selected-person document sharing still works.
-9. Verify bill/task assignment and due-date dashboards still work.
-10. Verify image preview and responsive web/mobile layouts.
+1. Account A signs up, uploads a profile photo, refreshes, and sees it retained.
+2. A creates a Buddy referral link and B connects.
+3. A assigns a task to B → B sees a Task badge and the task appears on B's Home under **Assigned to you**.
+4. B opens Tasks → Task badge clears.
+5. B changes task status → the relevant user receives a task update notification.
+6. A creates a Buddy Khata entry for B → B sees a Khata badge and the same ledger read-only from B's perspective.
+7. B opens Khata → Khata badge clears.
+8. A directly shares a document with B without a Shared Desk → B sees it; C does not.
+9. Verify private / whole-desk / selected-person document sharing still works.
+10. Verify the black + blue theme remains readable across desktop and mobile widths.
 
 ## Automated checks
 

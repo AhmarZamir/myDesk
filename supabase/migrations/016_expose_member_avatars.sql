@@ -2,7 +2,11 @@
 -- Buddies already receive avatar_url from get_my_buddies().
 -- Shared Desk members now receive avatar_url only when the caller belongs to the same desk.
 
-create or replace function public.get_desk_members(p_desk_id uuid)
+-- PostgreSQL cannot change a RETURNS TABLE shape with CREATE OR REPLACE.
+-- Drop the existing function signature first, then recreate it with avatar_url.
+drop function if exists public.get_desk_members(uuid);
+
+create function public.get_desk_members(p_desk_id uuid)
 returns table (
   user_id uuid,
   full_name text,

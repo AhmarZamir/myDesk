@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/app_semantics.dart';
 import '../services/workspace_service.dart';
 import 'khata_screen.dart';
 
@@ -27,8 +28,8 @@ class _KhataHubScreenState extends State<KhataHubScreen> {
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
         child: LayoutBuilder(builder: (context, constraints) {
           final compact = constraints.maxWidth < 560;
-          final take = _BalanceCard(label: 'Total you have to take', amount: receive, icon: Icons.south_west_rounded);
-          final giveCard = _BalanceCard(label: 'Total you have to give', amount: give, icon: Icons.north_east_rounded);
+          final take = _BalanceCard(label: 'Total you have to take', amount: receive, icon: Icons.south_west_rounded, color: AppSemantics.incoming);
+          final giveCard = _BalanceCard(label: 'Total you have to give', amount: give, icon: Icons.north_east_rounded, color: AppSemantics.outgoing);
           if (compact) {
             return Column(children: [SizedBox(height: 105, child: take), const SizedBox(height: 10), SizedBox(height: 105, child: giveCard)]);
           }
@@ -41,11 +42,24 @@ class _KhataHubScreenState extends State<KhataHubScreen> {
 }
 
 class _BalanceCard extends StatelessWidget {
-  final String label; final double amount; final IconData icon;
-  const _BalanceCard({required this.label, required this.amount, required this.icon});
-  @override Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.all(18), child: Row(children: [
-    CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primaryContainer, child: Icon(icon, color: Theme.of(context).colorScheme.primary)),
-    const SizedBox(width: 14),
-    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)), const SizedBox(height: 5), Text('Rs. ${amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900))])),
-  ])));
+  final String label; final double amount; final IconData icon; final Color color;
+  const _BalanceCard({required this.label, required this.amount, required this.icon, required this.color});
+  @override Widget build(BuildContext context) => Card(
+    child: InkWell(
+      borderRadius: BorderRadius.circular(22),
+      onTap: () {},
+      child: Padding(padding: const EdgeInsets.all(18), child: Row(children: [
+        CircleAvatar(backgroundColor: AppSemantics.soft(color), child: Icon(icon, color: color)),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 5),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: Text('Rs. ${amount.toStringAsFixed(2)}', key: ValueKey(amount), style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: color)),
+          ),
+        ])),
+      ])),
+    ),
+  );
 }

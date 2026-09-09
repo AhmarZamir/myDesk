@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
-import '../shared_desks/shared_desks_screen.dart';
-import '../workspace/documents_screen.dart';
+import '../shared_desks/shared_desks_hub_screen.dart';
+import '../workspace/documents_hub_screen.dart';
 import '../workspace/collaboration_modules.dart';
-import '../workspace/khata_screen.dart';
+import '../workspace/khata_hub_screen.dart';
 import '../buddies/buddies_screen.dart';
 import 'account_dialog.dart';
 import 'dashboard_screen.dart';
@@ -41,12 +41,12 @@ class _AppShellState extends State<AppShell> {
 
   Widget _pageForIndex() {
     switch (index) {
-      case 1: return const DocumentsScreen();
+      case 1: return const DocumentsHubScreen();
       case 2: return const BillsScreen();
       case 3: return const TasksScreen();
-      case 4: return const BuddyKhataScreen();
+      case 4: return const KhataHubScreen();
       case 5: return const BuddiesScreen();
-      case 6: return const SharedDesksScreen();
+      case 6: return const SharedDesksHubScreen();
       default: return DashboardScreen(onNavigate: _selectIndex);
     }
   }

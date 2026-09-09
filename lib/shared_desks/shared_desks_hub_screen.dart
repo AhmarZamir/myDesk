@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../services/desk_service.dart';
 import '../services/workspace_service.dart';
 import '../services/buddy_service.dart';
+import 'shared_desk_actions.dart';
 
 class SharedDesksHubScreen extends StatefulWidget {
   const SharedDesksHubScreen({super.key});
@@ -117,6 +118,14 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
     }
   }
 
+  Future<void> _runDeskAction(String action) async {
+    bool changed = false;
+    if (action == 'document') changed = await SharedDeskActions.uploadDocument(context, service: _workspace, deskId: id);
+    if (action == 'task') changed = await SharedDeskActions.addTask(context, service: _workspace, deskId: id);
+    if (action == 'bill') changed = await SharedDeskActions.addBill(context, service: _workspace, deskId: id);
+    if (changed && mounted) _refresh();
+  }
+
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text('${widget.desk['name']}', style: const TextStyle(fontWeight: FontWeight.w900)), actions: [if ((widget.desk['invite_code'] ?? '').toString().isNotEmpty) IconButton(tooltip: 'Copy invite code', icon: const Icon(Icons.link), onPressed: () async { await Clipboard.setData(ClipboardData(text: '${widget.desk['invite_code']}')); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invite code copied.'))); })]),
     body: FutureBuilder<List<dynamic>>(future: _future, builder: (context, snap) {
@@ -130,10 +139,24 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
       final buddyIds = buddies.map((b) => '${b['user_id']}').toSet();
       final openBills = bills.where((e) => e['status'] != 'paid').length;
       final openTasks = tasks.where((e) => e['status'] != 'completed').length;
+      final canWrite = '${widget.desk['role']}' != 'viewer';
       return ListView(padding: const EdgeInsets.all(24), children: [
         Card(child: Padding(padding: const EdgeInsets.all(20), child: Wrap(spacing: 20, runSpacing: 16, children: [
           _LargeStat(icon: Icons.people_outline, value: members.length, label: 'Members'), _LargeStat(icon: Icons.description_outlined, value: docs.length, label: 'Documents'), _LargeStat(icon: Icons.receipt_long_outlined, value: openBills, label: 'Open bills'), _LargeStat(icon: Icons.task_alt, value: openTasks, label: 'Tasks to do'),
         ]))),
+        if (canWrite) ...[
+          const SizedBox(height: 14),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Wrap(spacing: 10, runSpacing: 10, children: [
+                FilledButton.icon(onPressed: () => _runDeskAction('document'), icon: const Icon(Icons.upload_file), label: const Text('Share document')),
+                OutlinedButton.icon(onPressed: () => _runDeskAction('task'), icon: const Icon(Icons.assignment_add), label: const Text('Assign task')),
+                OutlinedButton.icon(onPressed: () => _runDeskAction('bill'), icon: const Icon(Icons.receipt_long_outlined), label: const Text('Add bill')),
+              ]),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         SingleChildScrollView(scrollDirection: Axis.horizontal, child: Wrap(spacing: 8, children: {'overview':'Overview','members':'Members','documents':'Documents','bills':'Bills','tasks':'Tasks'}.entries.map((e) => ChoiceChip(label: Text(e.value), selected: section == e.key, onSelected: (_) => setState(() => section = e.key))).toList())),
         const SizedBox(height: 18),

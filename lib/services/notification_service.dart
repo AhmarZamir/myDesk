@@ -7,8 +7,8 @@ class NotificationService {
   String get _uid => _db.auth.currentUser!.id;
 
   Future<Map<String, int>> counts() async {
-    final row = await _db.rpc('notification_counts');
-    final data = (row as List).isEmpty ? <String, dynamic>{} : Map<String, dynamic>.from((row as List).first);
+    final rows = await _db.rpc('notification_counts') as List;
+    final data = rows.isEmpty ? <String, dynamic>{} : Map<String, dynamic>.from(rows.first);
     return {
       'task': (data['task_count'] as num?)?.toInt() ?? 0,
       'khata': (data['khata_count'] as num?)?.toInt() ?? 0,
@@ -23,12 +23,7 @@ class NotificationService {
       .order('created_at', ascending: false);
 
   Future<List<Map<String, dynamic>>> recent({int limit = 12}) async {
-    final rows = await _db
-        .from('notifications')
-        .select()
-        .eq('recipient_id', _uid)
-        .order('created_at', ascending: false)
-        .limit(limit);
+    final rows = await _db.from('notifications').select().eq('recipient_id', _uid).order('created_at', ascending: false).limit(limit);
     return List<Map<String, dynamic>>.from(rows);
   }
 

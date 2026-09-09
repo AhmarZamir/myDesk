@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import '../shared_desks/shared_desks_screen.dart';
 import '../workspace/documents_screen.dart';
 import '../workspace/collaboration_modules.dart';
+import '../buddies/buddies_screen.dart';
 import 'account_dialog.dart';
 import 'dashboard_screen.dart';
 
@@ -16,13 +17,14 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int index = 0;
 
-  static const _labels = ['Home', 'Documents', 'Bills', 'Tasks', 'Khata', 'Shared Desks'];
+  static const _labels = ['Home', 'Documents', 'Bills', 'Tasks', 'Khata', 'Buddies', 'Shared Desks'];
   static const _icons = [
     Icons.home_outlined,
     Icons.folder_outlined,
     Icons.receipt_long_outlined,
     Icons.task_alt_outlined,
     Icons.account_balance_wallet_outlined,
+    Icons.people_outline,
     Icons.groups_outlined,
   ];
 
@@ -32,7 +34,8 @@ class _AppShellState extends State<AppShell> {
       case 2: return const BillsScreen();
       case 3: return const TasksScreen();
       case 4: return const KhataScreen();
-      case 5: return const SharedDesksScreen();
+      case 5: return const BuddiesScreen();
+      case 6: return const SharedDesksScreen();
       default: return DashboardScreen(onNavigate: (value) => setState(() => index = value));
     }
   }
@@ -48,8 +51,7 @@ class _AppShellState extends State<AppShell> {
               FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Sign out')),
             ],
           ),
-        ) ??
-        false;
+        ) ?? false;
     if (confirmed) await AuthService().signOut();
   }
 
@@ -93,11 +95,7 @@ class _AppShellState extends State<AppShell> {
               ),
               destinations: List.generate(
                 _labels.length,
-                (i) => NavigationRailDestination(
-                  icon: Icon(_icons[i]),
-                  selectedIcon: Icon(_selectedIcon(_icons[i])),
-                  label: Text(_labels[i]),
-                ),
+                (i) => NavigationRailDestination(icon: Icon(_icons[i]), selectedIcon: Icon(_selectedIcon(_icons[i])), label: Text(_labels[i])),
               ),
             ),
             const VerticalDivider(width: 1),
@@ -117,14 +115,11 @@ class _AppShellState extends State<AppShell> {
         body: _pageForIndex(),
         bottomNavigationBar: NavigationBar(
           selectedIndex: index,
+          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
           onDestinationSelected: (value) => setState(() => index = value),
           destinations: List.generate(
             _labels.length,
-            (i) => NavigationDestination(
-              icon: Icon(_icons[i]),
-              selectedIcon: Icon(_selectedIcon(_icons[i])),
-              label: _labels[i],
-            ),
+            (i) => NavigationDestination(icon: Icon(_icons[i]), selectedIcon: Icon(_selectedIcon(_icons[i])), label: _labels[i]),
           ),
         ),
       );
@@ -137,6 +132,7 @@ class _AppShellState extends State<AppShell> {
     if (icon == Icons.receipt_long_outlined) return Icons.receipt_long;
     if (icon == Icons.task_alt_outlined) return Icons.task_alt;
     if (icon == Icons.account_balance_wallet_outlined) return Icons.account_balance_wallet;
+    if (icon == Icons.people_outline) return Icons.people;
     return Icons.groups;
   }
 }

@@ -8,6 +8,7 @@ import '../workspace/khata_hub_screen.dart';
 import '../buddies/buddies_hub_screen.dart';
 import 'account_dialog.dart';
 import 'dashboard_screen.dart';
+import 'entity_detail_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -47,7 +48,7 @@ class _AppShellState extends State<AppShell> {
       case 4: return const KhataHubScreen();
       case 5: return const BuddiesHubScreen();
       case 6: return const SharedDesksHubScreen();
-      default: return DashboardScreen(onNavigate: _selectIndex);
+      default: return DashboardScreen(onNavigate: _selectIndex, onOpenEntity: _openEntity);
     }
   }
 
@@ -55,6 +56,58 @@ class _AppShellState extends State<AppShell> {
     setState(() => index = value);
     if (value == 3) await _notifications.markRead(kind: 'task');
     if (value == 4) await _notifications.markRead(kind: 'khata');
+  }
+
+  String _entityKind(Map<String, dynamic> item) {
+    final kind = '${item['kind']}';
+    final title = '${item['title']}'.toLowerCase();
+    if (kind == 'general' && title.contains('bill')) return 'bill';
+    return kind;
+  }
+
+  int _moduleForKind(String kind) {
+    if (kind == 'document') return 1;
+    if (kind == 'bill') return 2;
+    if (kind == 'task') return 3;
+    if (kind == 'khata') return 4;
+    if (kind == 'buddy') return 5;
+    if (kind == 'desk') return 6;
+    return 0;
+  }
+
+  Future<void> _openEntity({required String kind, required String entityId, String? title, String? body, String? notificationId}) async {
+    if (notificationId != null) await _notifications.markOneRead(notificationId);
+    final module = _moduleForKind(kind);
+    if (module > 0 && mounted) setState(() => index = module);
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EntityDetailScreen(
+          kind: kind,
+          entityId: entityId,
+          fallbackTitle: title,
+          fallbackBody: body,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openNotification(Map<String, dynamic> item) async {
+    final entityId = item['entity_id']?.toString();
+    final kind = _entityKind(item);
+    if (entityId == null || entityId.isEmpty || !const {'document', 'bill', 'task', 'khata'}.contains(kind)) {
+      await _notifications.markOneRead('${item['id']}');
+      await _selectIndex(_moduleForKind(kind));
+      return;
+    }
+    await _openEntity(
+      kind: kind,
+      entityId: entityId,
+      title: item['title']?.toString(),
+      body: item['body']?.toString(),
+      notificationId: '${item['id']}',
+    );
   }
 
   Future<void> _openAccount() async {
@@ -88,35 +141,23 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  int _notificationTarget(Map<String, dynamic> item) {
-    final kind = '${item['kind']}';
-    final title = '${item['title']}'.toLowerCase();
-    if (kind == 'task') return 3;
-    if (kind == 'khata') return 4;
-    if (kind == 'document') return 1;
-    if (title.contains('bill')) return 2;
-    if (kind == 'buddy') return 5;
-    if (kind == 'desk') return 6;
-    return 0;
-  }
-
   Widget _notificationButton(List<Map<String, dynamic>> rows) {
     final unreadCount = rows.where((n) => n['read_at'] == null).length;
-    return PopupMenuButton<int>(
+    return PopupMenuButton<Object>(
       tooltip: 'Notifications',
       offset: const Offset(0, 50),
       constraints: const BoxConstraints(minWidth: 320, maxWidth: 390),
-      onSelected: (target) async {
-        if (target == -1) {
+      onSelected: (value) async {
+        if (value == 'mark_all') {
           await _notifications.markRead();
           return;
         }
-        await _selectIndex(target);
+        if (value is Map<String, dynamic>) await _openNotification(value);
       },
       itemBuilder: (_) {
         final recent = rows.take(8).toList();
         return [
-          PopupMenuItem<int>(
+          PopupMenuItem<Object>(
             enabled: false,
             child: Row(children: [
               const Expanded(child: Text('Notifications', style: TextStyle(fontWeight: FontWeight.w800))),
@@ -124,11 +165,11 @@ class _AppShellState extends State<AppShell> {
             ]),
           ),
           if (recent.isEmpty)
-            const PopupMenuItem<int>(enabled: false, child: Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('You are all caught up.'))),
+            const PopupMenuItem<Object>(enabled: false, child: Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('You are all caught up.'))),
           ...recent.map((n) {
             final unread = n['read_at'] == null;
-            return PopupMenuItem<int>(
-              value: _notificationTarget(n),
+            return PopupMenuItem<Object>(
+              value: n,
               child: ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -143,7 +184,7 @@ class _AppShellState extends State<AppShell> {
             );
           }),
           if (unreadCount > 0) const PopupMenuDivider(),
-          if (unreadCount > 0) const PopupMenuItem<int>(value: -1, child: Center(child: Text('Mark all as read'))),
+          if (unreadCount > 0) const PopupMenuItem<Object>(value: 'mark_all', child: Center(child: Text('Mark all as read'))),
         ];
       },
       child: Padding(

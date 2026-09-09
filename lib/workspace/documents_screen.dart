@@ -90,7 +90,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   TextField(controller: title, autofocus: true, decoration: const InputDecoration(labelText: 'Title')),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: category,
+                    initialValue: category,
                     decoration: const InputDecoration(labelText: 'Category'),
                     items: const ['id', 'certificate', 'property', 'medical', 'receipt', 'other']
                         .map((e) => DropdownMenuItem(value: e, child: Text(e)))
@@ -101,7 +101,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.event_outlined),
-                    title: Text(expiresAt == null ? 'No expiry date' : 'Expires ${_date(expiresAt)}'),
+                    title: Text(expiresAt == null ? 'No expiry date' : 'Expires ${_date(expiresAt!)}'),
                     subtitle: const Text('Optional · myDesk will surface upcoming expiries on Home.'),
                     trailing: expiresAt == null
                         ? const Icon(Icons.chevron_right)
@@ -138,7 +138,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   if (visibility != 'private') ...[
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      value: deskId,
+                      key: ValueKey('upload-desk-$deskId'),
+                      initialValue: deskId,
                       decoration: const InputDecoration(labelText: 'Shared Desk'),
                       items: desks.map((d) => DropdownMenuItem<String>(value: d['id'] as String, child: Text('${d['name']}'))).toList(),
                       onChanged: (v) {
@@ -280,7 +281,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   if (visibility != 'private') ...[
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      value: deskId,
+                      key: ValueKey('manage-desk-$deskId'),
+                      initialValue: deskId,
                       decoration: const InputDecoration(labelText: 'Shared Desk'),
                       items: desks.map((d) => DropdownMenuItem<String>(value: d['id'] as String, child: Text('${d['name']}'))).toList(),
                       onChanged: (v) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/app_semantics.dart';
 import '../services/workspace_service.dart';
+import 'task_bill_detail_screens.dart';
 
 Future<bool> _confirmAction(BuildContext context, {required String title, required String message}) async {
   return await showDialog<bool>(
@@ -23,11 +24,13 @@ class BillsScreen extends StatefulWidget {
 
 class _BillsScreenState extends State<BillsScreen> {
   final service = WorkspaceService();
-  late Future<List<Map<String, dynamic>>> future;
+  late Future<List<dynamic>> future;
   String filter = 'all';
+  String workspace = 'all';
 
-  @override void initState() { super.initState(); future = service.bills(); }
-  void refresh() => setState(() => future = service.bills());
+  @override void initState() { super.initState(); _reload(); }
+  void _reload() => future = Future.wait([service.bills(), service.desks()]);
+  void refresh() => setState(_reload);
 
   Future<void> add() async {
     final desks = (await service.desks()).where((d) => d['role'] != 'viewer').toList();
@@ -86,7 +89,7 @@ class _BillsScreenState extends State<BillsScreen> {
     title.dispose(); amount.dispose();
   }
 
-  List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> items) {
+  List<Map<String, dynamic>> _statusFiltered(List<Map<String, dynamic>> items) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     if (filter == 'paid') return items.where((e) => e['status'] == 'paid').toList();
@@ -95,44 +98,68 @@ class _BillsScreenState extends State<BillsScreen> {
     return items;
   }
 
+  List<Map<String, dynamic>> _workspaceFiltered(List<Map<String, dynamic>> items) {
+    if (workspace == 'all') return items;
+    if (workspace == 'personal') return items.where((e) => e['desk_id'] == null).toList();
+    return items.where((e) => '${e['desk_id']}' == workspace).toList();
+  }
+
+  String _workspaceName(Map<String, dynamic> item, List<Map<String, dynamic>> desks) {
+    if (item['desk_id'] == null) return 'Personal';
+    final rows = desks.where((d) => '${d['id']}' == '${item['desk_id']}').toList();
+    return rows.isEmpty ? 'Shared Desk' : '${rows.first['name']}';
+  }
+
   @override Widget build(BuildContext context) => _ModuleScaffold(
-    title: 'Bills & Payments', subtitle: 'Track what is coming up, overdue and already paid.',
+    title: 'Bills & Payments', subtitle: 'Track payments by status and workspace.',
     action: FilledButton.icon(onPressed: add, icon: const Icon(Icons.add), label: const Text('Add bill')),
     tabs: _FilterTabs(values: const {'all':'All','upcoming':'Upcoming','overdue':'Overdue','paid':'Paid'}, selected: filter, onChanged: (v) => setState(() => filter = v)),
-    child: FutureBuilder<List<Map<String, dynamic>>>(future: future, builder: (context, snap) {
+    child: FutureBuilder<List<dynamic>>(future: future, builder: (context, snap) {
       if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
       if (snap.hasError) return _ErrorState(error: snap.error.toString(), onRetry: refresh);
-      final items = _filtered(snap.data ?? []);
-      if (items.isEmpty) return _EmptyState(icon: Icons.receipt_long_outlined, text: 'No ${filter == 'all' ? '' : filter} bills found');
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      return Column(children: items.map((item) {
-        final isOwner = item['owner_id'] == service.currentUserId;
-        final status = '${item['status']}';
-        final due = DateTime.tryParse('${item['due_date'] ?? ''}');
-        final overdue = status != 'paid' && due != null && due.isBefore(today);
-        final semanticStatus = status == 'paid' ? 'paid' : overdue ? 'overdue' : 'pending';
-        final color = AppSemantics.statusColor(semanticStatus);
-        return Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(
-          leading: CircleAvatar(backgroundColor: AppSemantics.soft(color), child: Icon(status == 'paid' ? Icons.check_rounded : overdue ? Icons.warning_amber_rounded : Icons.schedule_rounded, color: color)),
-          title: Text('${item['title'] ?? 'Bill'}', style: TextStyle(fontWeight: FontWeight.w800, decoration: status == 'paid' ? TextDecoration.lineThrough : null)),
-          subtitle: Wrap(spacing: 7, runSpacing: 5, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            if (item['due_date'] != null) Text('Due ${item['due_date']}'),
-            _StatusPill(label: status == 'paid' ? 'Paid' : overdue ? 'Overdue' : 'Upcoming', color: color),
-            if (item['assignee_name'] != null) Text('Responsible: ${item['assignee_name']}'),
-          ]),
-          trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
-            Text('Rs. ${item['amount']}', style: TextStyle(fontWeight: FontWeight.w900, color: status == 'paid' ? AppSemantics.incoming : overdue ? AppSemantics.outgoing : null)),
-            PopupMenuButton<String>(onSelected: (value) async {
-              try {
-                if (value == 'paid' || value == 'unpaid') await service.setBillStatus(item['id'], value);
-                if (value == 'delete' && await _confirmAction(context, title: 'Delete bill?', message: 'This permanently removes this bill.')) await service.deleteBill(item['id']);
-                refresh();
-              } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update bill: $e'))); }
-            }, itemBuilder: (_) => [if (status != 'paid') const PopupMenuItem(value: 'paid', child: Text('Mark paid')), if (status == 'paid') const PopupMenuItem(value: 'unpaid', child: Text('Mark unpaid')), if (isOwner) const PopupMenuItem(value: 'delete', child: Text('Delete'))]),
-          ]),
-        ));
-      }).toList());
+      final allBills = List<Map<String, dynamic>>.from(snap.data![0] as List);
+      final desks = List<Map<String, dynamic>>.from(snap.data![1] as List);
+      final workspaces = <String, String>{'all':'All spaces','personal':'Personal', for (final d in desks) '${d['id']}':'${d['name']}'};
+      if (!workspaces.containsKey(workspace)) workspace = 'all';
+      final items = _workspaceFiltered(_statusFiltered(allBills));
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _WorkspaceTabs(values: workspaces, selected: workspace, onChanged: (v) => setState(() => workspace = v)),
+        const SizedBox(height: 18),
+        if (items.isEmpty) _EmptyState(icon: Icons.receipt_long_outlined, text: 'No bills in this section') else ...items.map((item) {
+          final isOwner = item['owner_id'] == service.currentUserId;
+          final status = '${item['status']}';
+          final due = DateTime.tryParse('${item['due_date'] ?? ''}');
+          final now = DateTime.now();
+          final overdue = status != 'paid' && due != null && due.isBefore(DateTime(now.year, now.month, now.day));
+          final semanticStatus = status == 'paid' ? 'paid' : overdue ? 'overdue' : 'pending';
+          final color = AppSemantics.statusColor(semanticStatus);
+          final workspaceName = _workspaceName(item, desks);
+          return Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(
+            onTap: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => BillDetailScreen(bill: item, workspaceName: workspaceName)));
+              refresh();
+            },
+            leading: CircleAvatar(backgroundColor: AppSemantics.soft(color), child: Icon(status == 'paid' ? Icons.check_rounded : overdue ? Icons.warning_amber_rounded : Icons.schedule_rounded, color: color)),
+            title: Text('${item['title'] ?? 'Bill'}', style: TextStyle(fontWeight: FontWeight.w800, decoration: status == 'paid' ? TextDecoration.lineThrough : null)),
+            subtitle: Wrap(spacing: 7, runSpacing: 5, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              _StatusPill(label: workspaceName, color: Theme.of(context).colorScheme.primary),
+              if (item['due_date'] != null) Text('Due ${item['due_date']}'),
+              _StatusPill(label: status == 'paid' ? 'Paid' : overdue ? 'Overdue' : 'Upcoming', color: color),
+              if (item['assignee_name'] != null) Text('Responsible: ${item['assignee_name']}'),
+            ]),
+            trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text('Rs. ${item['amount']}', style: TextStyle(fontWeight: FontWeight.w900, color: status == 'paid' ? AppSemantics.incoming : overdue ? AppSemantics.outgoing : null)),
+              PopupMenuButton<String>(onSelected: (value) async {
+                try {
+                  if (value == 'paid' || value == 'unpaid') await service.setBillStatus(item['id'], value);
+                  if (value == 'delete' && await _confirmAction(context, title: 'Delete bill?', message: 'This permanently removes this bill.')) await service.deleteBill(item['id']);
+                  refresh();
+                } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update bill: $e'))); }
+              }, itemBuilder: (_) => [if (status != 'paid') const PopupMenuItem(value: 'paid', child: Text('Mark paid')), if (status == 'paid') const PopupMenuItem(value: 'unpaid', child: Text('Mark unpaid')), if (isOwner) const PopupMenuItem(value: 'delete', child: Text('Delete'))]),
+            ]),
+          ));
+        }),
+      ]);
     }),
   );
 }
@@ -144,11 +171,13 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> {
   final service = WorkspaceService();
-  late Future<List<Map<String, dynamic>>> future;
+  late Future<List<dynamic>> future;
   String filter = 'all';
+  String workspace = 'all';
 
-  @override void initState() { super.initState(); future = service.tasks(); }
-  void refresh() => setState(() => future = service.tasks());
+  @override void initState() { super.initState(); _reload(); }
+  void _reload() => future = Future.wait([service.tasks(), service.desks()]);
+  void refresh() => setState(_reload);
 
   Future<void> add() async {
     final desks = (await service.desks()).where((d) => d['role'] != 'viewer').toList();
@@ -181,47 +210,71 @@ class _TasksScreenState extends State<TasksScreen> {
     title.dispose(); description.dispose();
   }
 
-  List<Map<String,dynamic>> _filtered(List<Map<String,dynamic>> items) {
+  List<Map<String,dynamic>> _statusFiltered(List<Map<String,dynamic>> items) {
     if (filter == 'my') return items.where((e) => e['creator_id'] == service.currentUserId && e['assignee_id'] == service.currentUserId && e['status'] != 'completed').toList();
     if (filter == 'assigned') return items.where((e) => e['assignee_id'] == service.currentUserId && e['creator_id'] != service.currentUserId && e['status'] != 'completed').toList();
     if (filter == 'completed') return items.where((e) => e['status'] == 'completed').toList();
     return items;
   }
 
+  List<Map<String,dynamic>> _workspaceFiltered(List<Map<String,dynamic>> items) {
+    if (workspace == 'all') return items;
+    if (workspace == 'personal') return items.where((e) => e['desk_id'] == null).toList();
+    return items.where((e) => '${e['desk_id']}' == workspace).toList();
+  }
+
+  String _workspaceName(Map<String, dynamic> item, List<Map<String, dynamic>> desks) {
+    if (item['desk_id'] == null) return 'Personal';
+    final rows = desks.where((d) => '${d['id']}' == '${item['desk_id']}').toList();
+    return rows.isEmpty ? 'Shared Desk' : '${rows.first['name']}';
+  }
+
   @override Widget build(BuildContext context) => _ModuleScaffold(
-    title: 'Tasks', subtitle: 'Separate your own work from tasks assigned by other people.',
+    title: 'Tasks', subtitle: 'Separate your work by responsibility and workspace.',
     action: FilledButton.icon(onPressed: add, icon: const Icon(Icons.assignment_add), label: const Text('Assign Task')),
     tabs: _FilterTabs(values: const {'all':'All','my':'My Tasks','assigned':'Assigned','completed':'Completed'}, selected: filter, onChanged: (v) => setState(() => filter = v)),
-    child: FutureBuilder<List<Map<String,dynamic>>>(future: future, builder: (context, snap) {
+    child: FutureBuilder<List<dynamic>>(future: future, builder: (context, snap) {
       if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
       if (snap.hasError) return _ErrorState(error: snap.error.toString(), onRetry: refresh);
-      final items = _filtered(snap.data ?? []);
-      if (items.isEmpty) return const _EmptyState(icon: Icons.task_alt, text: 'No tasks in this section');
-      return Column(children: items.map((item) {
-        final status = '${item['status']}';
-        final priority = '${item['priority']}';
-        final isCreator = item['creator_id'] == service.currentUserId;
-        final statusColor = AppSemantics.statusColor(status);
-        final priorityColor = AppSemantics.priorityColor(priority);
-        return Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(
-          leading: CircleAvatar(backgroundColor: AppSemantics.soft(priorityColor), child: Icon(_priorityIcon(priority), color: priorityColor)),
-          title: Text('${item['title'] ?? 'Task'}', style: TextStyle(fontWeight: FontWeight.w800, decoration: status == 'completed' ? TextDecoration.lineThrough : null, color: status == 'completed' ? AppSemantics.incoming : null)),
-          subtitle: Wrap(spacing: 7, runSpacing: 5, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            _StatusPill(label: '${priority[0].toUpperCase()}${priority.substring(1)}', color: priorityColor),
-            _StatusPill(label: _statusLabel(status), color: statusColor),
-            if (item['due_date'] != null) Text('Due ${_formatDate(DateTime.tryParse('${item['due_date']}'))}'),
-            if (item['assignee_name'] != null) Text('Assigned: ${item['assignee_name']}'),
-            if ((item['description'] ?? '').toString().trim().isNotEmpty) Text('${item['description']}'),
-          ]),
-          trailing: PopupMenuButton<String>(onSelected: (value) async {
-            try {
-              if (const {'pending','in_progress','completed'}.contains(value)) await service.setTaskStatus(item['id'], value);
-              if (value == 'delete' && await _confirmAction(context, title: 'Delete task?', message: 'This permanently removes this task.')) await service.deleteTask(item['id']);
+      final allTasks = List<Map<String,dynamic>>.from(snap.data![0] as List);
+      final desks = List<Map<String,dynamic>>.from(snap.data![1] as List);
+      final workspaces = <String, String>{'all':'All spaces','personal':'Personal', for (final d in desks) '${d['id']}':'${d['name']}'};
+      if (!workspaces.containsKey(workspace)) workspace = 'all';
+      final items = _workspaceFiltered(_statusFiltered(allTasks));
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _WorkspaceTabs(values: workspaces, selected: workspace, onChanged: (v) => setState(() => workspace = v)),
+        const SizedBox(height: 18),
+        if (items.isEmpty) const _EmptyState(icon: Icons.task_alt, text: 'No tasks in this section') else ...items.map((item) {
+          final status = '${item['status']}';
+          final priority = '${item['priority']}';
+          final isCreator = item['creator_id'] == service.currentUserId;
+          final statusColor = AppSemantics.statusColor(status);
+          final priorityColor = AppSemantics.priorityColor(priority);
+          final workspaceName = _workspaceName(item, desks);
+          return Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(
+            onTap: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => TaskDetailScreen(task: item, workspaceName: workspaceName)));
               refresh();
-            } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update task: $e'))); }
-          }, itemBuilder: (_) => [if (status != 'pending') const PopupMenuItem(value: 'pending', child: Text('Set pending')), if (status != 'in_progress') const PopupMenuItem(value: 'in_progress', child: Text('Set in progress')), if (status != 'completed') const PopupMenuItem(value: 'completed', child: Text('Mark completed')), if (isCreator) const PopupMenuItem(value: 'delete', child: Text('Delete'))]),
-        ));
-      }).toList());
+            },
+            leading: CircleAvatar(backgroundColor: AppSemantics.soft(priorityColor), child: Icon(_priorityIcon(priority), color: priorityColor)),
+            title: Text('${item['title'] ?? 'Task'}', style: TextStyle(fontWeight: FontWeight.w800, decoration: status == 'completed' ? TextDecoration.lineThrough : null, color: status == 'completed' ? AppSemantics.incoming : null)),
+            subtitle: Wrap(spacing: 7, runSpacing: 5, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              _StatusPill(label: workspaceName, color: Theme.of(context).colorScheme.primary),
+              _StatusPill(label: '${priority[0].toUpperCase()}${priority.substring(1)}', color: priorityColor),
+              _StatusPill(label: _statusLabel(status), color: statusColor),
+              if (item['due_date'] != null) Text('Due ${_formatDate(DateTime.tryParse('${item['due_date']}'))}'),
+              if (item['assignee_name'] != null) Text('Assigned: ${item['assignee_name']}'),
+            ]),
+            trailing: PopupMenuButton<String>(onSelected: (value) async {
+              try {
+                if (const {'pending','in_progress','completed'}.contains(value)) await service.setTaskStatus(item['id'], value);
+                if (value == 'delete' && await _confirmAction(context, title: 'Delete task?', message: 'This permanently removes this task.')) await service.deleteTask(item['id']);
+                refresh();
+              } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update task: $e'))); }
+            }, itemBuilder: (_) => [if (status != 'pending') const PopupMenuItem(value: 'pending', child: Text('Set pending')), if (status != 'in_progress') const PopupMenuItem(value: 'in_progress', child: Text('Set in progress')), if (status != 'completed') const PopupMenuItem(value: 'completed', child: Text('Mark completed')), if (isCreator) const PopupMenuItem(value: 'delete', child: Text('Delete'))]),
+          ));
+        }),
+      ]);
     }),
   );
 }
@@ -241,6 +294,15 @@ class _FilterTabs extends StatelessWidget {
   final Map<String,String> values; final String selected; final ValueChanged<String> onChanged;
   const _FilterTabs({required this.values, required this.selected, required this.onChanged});
   @override Widget build(BuildContext context) => SingleChildScrollView(scrollDirection: Axis.horizontal, child: SegmentedButton<String>(segments: values.entries.map((e) => ButtonSegment(value: e.key, label: Text(e.value))).toList(), selected: {selected}, onSelectionChanged: (v) => onChanged(v.first)));
+}
+
+class _WorkspaceTabs extends StatelessWidget {
+  final Map<String,String> values; final String selected; final ValueChanged<String> onChanged;
+  const _WorkspaceTabs({required this.values, required this.selected, required this.onChanged});
+  @override Widget build(BuildContext context) => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: Wrap(spacing: 8, children: values.entries.map((e) => ChoiceChip(label: Text(e.value), selected: selected == e.key, onSelected: (_) => onChanged(e.key))).toList()),
+  );
 }
 
 class _ModuleScaffold extends StatelessWidget {

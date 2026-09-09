@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/app_semantics.dart';
 import '../services/workspace_service.dart';
 
 Future<bool> _confirmAction(BuildContext context, {required String title, required String message}) async {
@@ -9,7 +10,7 @@ Future<bool> _confirmAction(BuildContext context, {required String title, requir
           content: Text(message),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            FilledButton(style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error), onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+            FilledButton(style: FilledButton.styleFrom(backgroundColor: AppSemantics.outgoing), onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
           ],
         ),
       ) ?? false;
@@ -76,8 +77,11 @@ class _BillsScreenState extends State<BillsScreen> {
     );
     final parsed = double.tryParse(amount.text.trim());
     if (ok == true && parsed != null) {
-      try { await service.addBill(title: title.text, amount: parsed, dueDate: due, deskId: deskId, assignedTo: assignedTo); refresh(); }
-      catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add bill: $e'))); }
+      try {
+        await service.addBill(title: title.text, amount: parsed, dueDate: due, deskId: deskId, assignedTo: assignedTo);
+        refresh();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill added successfully.')));
+      } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add bill: $e'))); }
     }
     title.dispose(); amount.dispose();
   }
@@ -100,15 +104,25 @@ class _BillsScreenState extends State<BillsScreen> {
       if (snap.hasError) return _ErrorState(error: snap.error.toString(), onRetry: refresh);
       final items = _filtered(snap.data ?? []);
       if (items.isEmpty) return _EmptyState(icon: Icons.receipt_long_outlined, text: 'No ${filter == 'all' ? '' : filter} bills found');
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
       return Column(children: items.map((item) {
         final isOwner = item['owner_id'] == service.currentUserId;
         final status = '${item['status']}';
+        final due = DateTime.tryParse('${item['due_date'] ?? ''}');
+        final overdue = status != 'paid' && due != null && due.isBefore(today);
+        final semanticStatus = status == 'paid' ? 'paid' : overdue ? 'overdue' : 'pending';
+        final color = AppSemantics.statusColor(semanticStatus);
         return Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(
-          leading: CircleAvatar(child: Icon(status == 'paid' ? Icons.check : Icons.receipt_long_outlined)),
-          title: Text('${item['title'] ?? 'Bill'}', style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text([if (item['due_date'] != null) 'Due ${item['due_date']}', status, if (item['assignee_name'] != null) 'Responsible: ${item['assignee_name']}'].join(' · ')),
+          leading: CircleAvatar(backgroundColor: AppSemantics.soft(color), child: Icon(status == 'paid' ? Icons.check_rounded : overdue ? Icons.warning_amber_rounded : Icons.schedule_rounded, color: color)),
+          title: Text('${item['title'] ?? 'Bill'}', style: TextStyle(fontWeight: FontWeight.w800, decoration: status == 'paid' ? TextDecoration.lineThrough : null)),
+          subtitle: Wrap(spacing: 7, runSpacing: 5, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            if (item['due_date'] != null) Text('Due ${item['due_date']}'),
+            _StatusPill(label: status == 'paid' ? 'Paid' : overdue ? 'Overdue' : 'Upcoming', color: color),
+            if (item['assignee_name'] != null) Text('Responsible: ${item['assignee_name']}'),
+          ]),
           trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
-            Text('Rs. ${item['amount']}', style: const TextStyle(fontWeight: FontWeight.w900)),
+            Text('Rs. ${item['amount']}', style: TextStyle(fontWeight: FontWeight.w900, color: status == 'paid' ? AppSemantics.incoming : overdue ? AppSemantics.outgoing : null)),
             PopupMenuButton<String>(onSelected: (value) async {
               try {
                 if (value == 'paid' || value == 'unpaid') await service.setBillStatus(item['id'], value);
@@ -158,8 +172,11 @@ class _TasksScreenState extends State<TasksScreen> {
       actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () { if (title.text.trim().isEmpty || (deskId != null && assigneeId == null)) return; Navigator.pop(context, true); }, child: const Text('Assign task'))],
     )));
     if (ok == true) {
-      try { await service.addTask(title: title.text, description: description.text, priority: priority, deskId: deskId, assigneeId: assigneeId, dueDate: due); refresh(); }
-      catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not create task: $e'))); }
+      try {
+        await service.addTask(title: title.text, description: description.text, priority: priority, deskId: deskId, assigneeId: assigneeId, dueDate: due);
+        refresh();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task assigned successfully.')));
+      } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not create task: $e'))); }
     }
     title.dispose(); description.dispose();
   }
@@ -181,11 +198,21 @@ class _TasksScreenState extends State<TasksScreen> {
       final items = _filtered(snap.data ?? []);
       if (items.isEmpty) return const _EmptyState(icon: Icons.task_alt, text: 'No tasks in this section');
       return Column(children: items.map((item) {
-        final status = '${item['status']}'; final isCreator = item['creator_id'] == service.currentUserId;
+        final status = '${item['status']}';
+        final priority = '${item['priority']}';
+        final isCreator = item['creator_id'] == service.currentUserId;
+        final statusColor = AppSemantics.statusColor(status);
+        final priorityColor = AppSemantics.priorityColor(priority);
         return Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(
-          leading: CircleAvatar(child: Icon(_priorityIcon('${item['priority']}'))),
-          title: Text('${item['title'] ?? 'Task'}', style: TextStyle(fontWeight: FontWeight.w800, decoration: status == 'completed' ? TextDecoration.lineThrough : null)),
-          subtitle: Text(['${item['priority']} priority', _statusLabel(status), if (item['due_date'] != null) 'Due ${_formatDate(DateTime.tryParse('${item['due_date']}'))}', if (item['assignee_name'] != null) 'Assigned: ${item['assignee_name']}', if ((item['description'] ?? '').toString().trim().isNotEmpty) '${item['description']}'].join(' · ')),
+          leading: CircleAvatar(backgroundColor: AppSemantics.soft(priorityColor), child: Icon(_priorityIcon(priority), color: priorityColor)),
+          title: Text('${item['title'] ?? 'Task'}', style: TextStyle(fontWeight: FontWeight.w800, decoration: status == 'completed' ? TextDecoration.lineThrough : null, color: status == 'completed' ? AppSemantics.incoming : null)),
+          subtitle: Wrap(spacing: 7, runSpacing: 5, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            _StatusPill(label: '${priority[0].toUpperCase()}${priority.substring(1)}', color: priorityColor),
+            _StatusPill(label: _statusLabel(status), color: statusColor),
+            if (item['due_date'] != null) Text('Due ${_formatDate(DateTime.tryParse('${item['due_date']}'))}'),
+            if (item['assignee_name'] != null) Text('Assigned: ${item['assignee_name']}'),
+            if ((item['description'] ?? '').toString().trim().isNotEmpty) Text('${item['description']}'),
+          ]),
           trailing: PopupMenuButton<String>(onSelected: (value) async {
             try {
               if (const {'pending','in_progress','completed'}.contains(value)) await service.setTaskStatus(item['id'], value);
@@ -196,6 +223,17 @@ class _TasksScreenState extends State<TasksScreen> {
         ));
       }).toList());
     }),
+  );
+}
+
+class _StatusPill extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _StatusPill({required this.label, required this.color});
+  @override Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    decoration: BoxDecoration(color: AppSemantics.soft(color), borderRadius: BorderRadius.circular(999), border: Border.all(color: color.withValues(alpha: .35))),
+    child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800)),
   );
 }
 
@@ -215,7 +253,7 @@ class _ModuleScaffold extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget { final IconData icon; final String text; const _EmptyState({required this.icon, required this.text}); @override Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.all(36), child: Column(children: [Icon(icon, size: 44), const SizedBox(height: 10), Text(text, textAlign: TextAlign.center)]))); }
-class _ErrorState extends StatelessWidget { final String error; final VoidCallback onRetry; const _ErrorState({required this.error, required this.onRetry}); @override Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.all(28), child: Column(children: [Text(error, textAlign: TextAlign.center), const SizedBox(height: 12), OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry'))]))); }
+class _ErrorState extends StatelessWidget { final String error; final VoidCallback onRetry; const _ErrorState({required this.error, required this.onRetry}); @override Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.all(28), child: Column(children: [Icon(Icons.error_outline, color: AppSemantics.outgoing, size: 38), const SizedBox(height: 8), Text(error, textAlign: TextAlign.center), const SizedBox(height: 12), OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry'))]))); }
 
 String _formatDate(DateTime? value) { if (value == null) return 'No date'; final d = value.toLocal(); return '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}'; }
 String _statusLabel(String status) => status.replaceAll('_', ' ');

@@ -27,13 +27,12 @@ class _KhataHubScreenState extends State<KhataHubScreen> {
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
         child: LayoutBuilder(builder: (context, constraints) {
           final compact = constraints.maxWidth < 560;
-          final cards = [
-            Expanded(child: _BalanceCard(label: 'Total you have to take', amount: receive, icon: Icons.south_west_rounded)),
-            if (!compact) const SizedBox(width: 12),
-            Expanded(child: _BalanceCard(label: 'Total you have to give', amount: give, icon: Icons.north_east_rounded)),
-          ];
-          if (compact) return Column(children: [SizedBox(height: 105, child: cards[0]), const SizedBox(height: 10), SizedBox(height: 105, child: cards[1])]);
-          return SizedBox(height: 112, child: Row(children: cards));
+          final take = _BalanceCard(label: 'Total you have to take', amount: receive, icon: Icons.south_west_rounded);
+          final giveCard = _BalanceCard(label: 'Total you have to give', amount: give, icon: Icons.north_east_rounded);
+          if (compact) {
+            return Column(children: [SizedBox(height: 105, child: take), const SizedBox(height: 10), SizedBox(height: 105, child: giveCard)]);
+          }
+          return SizedBox(height: 112, child: Row(children: [Expanded(child: take), const SizedBox(width: 12), Expanded(child: giveCard)]));
         }),
       );
     }),

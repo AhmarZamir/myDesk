@@ -3,6 +3,8 @@ import '../services/auth_service.dart';
 import '../shared_desks/shared_desks_screen.dart';
 import '../workspace/documents_screen.dart';
 import '../workspace/collaboration_modules.dart';
+import 'account_dialog.dart';
+import 'dashboard_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -14,15 +16,6 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int index = 0;
 
-  final _pages = const [
-    _DashboardPage(),
-    DocumentsScreen(),
-    BillsScreen(),
-    TasksScreen(),
-    KhataScreen(),
-    SharedDesksScreen(),
-  ];
-
   static const _labels = ['Home', 'Documents', 'Bills', 'Tasks', 'Khata', 'Shared Desks'];
   static const _icons = [
     Icons.home_outlined,
@@ -32,6 +25,33 @@ class _AppShellState extends State<AppShell> {
     Icons.account_balance_wallet_outlined,
     Icons.groups_outlined,
   ];
+
+  Widget _pageForIndex() {
+    switch (index) {
+      case 1: return const DocumentsScreen();
+      case 2: return const BillsScreen();
+      case 3: return const TasksScreen();
+      case 4: return const KhataScreen();
+      case 5: return const SharedDesksScreen();
+      default: return DashboardScreen(onNavigate: (value) => setState(() => index = value));
+    }
+  }
+
+  Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Sign out?'),
+            content: const Text('You will need to sign in again to access your private workspace.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Sign out')),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirmed) await AuthService().signOut();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,17 +84,24 @@ class _AppShellState extends State<AppShell> {
                   alignment: Alignment.bottomCenter,
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 16),
-                    child: IconButton(tooltip: 'Sign out', onPressed: () => AuthService().signOut(), icon: const Icon(Icons.logout)),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      IconButton(tooltip: 'Account', onPressed: () => showAccountDialog(context), icon: const Icon(Icons.account_circle_outlined)),
+                      IconButton(tooltip: 'Sign out', onPressed: _signOut, icon: const Icon(Icons.logout)),
+                    ]),
                   ),
                 ),
               ),
               destinations: List.generate(
                 _labels.length,
-                (i) => NavigationRailDestination(icon: Icon(_icons[i]), selectedIcon: Icon(_selectedIcon(_icons[i])), label: Text(_labels[i])),
+                (i) => NavigationRailDestination(
+                  icon: Icon(_icons[i]),
+                  selectedIcon: Icon(_selectedIcon(_icons[i])),
+                  label: Text(_labels[i]),
+                ),
               ),
             ),
             const VerticalDivider(width: 1),
-            Expanded(child: _pages[index]),
+            Expanded(child: _pageForIndex()),
           ]),
         );
       }
@@ -82,13 +109,23 @@ class _AppShellState extends State<AppShell> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('myDesk', style: TextStyle(fontWeight: FontWeight.w800)),
-          actions: [IconButton(tooltip: 'Sign out', onPressed: () => AuthService().signOut(), icon: const Icon(Icons.logout))],
+          actions: [
+            IconButton(tooltip: 'Account', onPressed: () => showAccountDialog(context), icon: const Icon(Icons.account_circle_outlined)),
+            IconButton(tooltip: 'Sign out', onPressed: _signOut, icon: const Icon(Icons.logout)),
+          ],
         ),
-        body: _pages[index],
+        body: _pageForIndex(),
         bottomNavigationBar: NavigationBar(
           selectedIndex: index,
           onDestinationSelected: (value) => setState(() => index = value),
-          destinations: List.generate(_labels.length, (i) => NavigationDestination(icon: Icon(_icons[i]), selectedIcon: Icon(_selectedIcon(_icons[i])), label: _labels[i])),
+          destinations: List.generate(
+            _labels.length,
+            (i) => NavigationDestination(
+              icon: Icon(_icons[i]),
+              selectedIcon: Icon(_selectedIcon(_icons[i])),
+              label: _labels[i],
+            ),
+          ),
         ),
       );
     });
@@ -101,79 +138,5 @@ class _AppShellState extends State<AppShell> {
     if (icon == Icons.task_alt_outlined) return Icons.task_alt;
     if (icon == Icons.account_balance_wallet_outlined) return Icons.account_balance_wallet;
     return Icons.groups;
-  }
-}
-
-class _DashboardPage extends StatelessWidget {
-  const _DashboardPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        const Text('Your Desk', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 5),
-        const Text('Everything important, organized in one place.', style: TextStyle(color: Colors.black54)),
-        const SizedBox(height: 24),
-        LayoutBuilder(builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 900 ? 4 : constraints.maxWidth >= 520 ? 2 : 1;
-          return GridView.count(
-            crossAxisCount: columns,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 14,
-            crossAxisSpacing: 14,
-            childAspectRatio: 2.1,
-            children: const [
-              _StatCard(icon: Icons.folder_outlined, title: 'Documents', value: 'Private & selective sharing'),
-              _StatCard(icon: Icons.receipt_long_outlined, title: 'Bills', value: 'Assign payment responsibility'),
-              _StatCard(icon: Icons.task_alt_outlined, title: 'Tasks', value: 'Assign to desk members'),
-              _StatCard(icon: Icons.groups_outlined, title: 'Shared Desks', value: 'Family & trusted groups'),
-            ],
-          );
-        }),
-        const SizedBox(height: 26),
-        const Card(
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(children: [
-              ListTile(leading: Icon(Icons.security_outlined), title: Text('Private by default'), subtitle: Text('Every upload starts with you deciding who can see it')),
-              Divider(),
-              ListTile(leading: Icon(Icons.family_restroom), title: Text('Selective sharing'), subtitle: Text('Share with a whole desk or only selected members')),
-              Divider(),
-              ListTile(leading: Icon(Icons.assignment_ind_outlined), title: Text('Clear responsibility'), subtitle: Text('Tasks and bills can be assigned to specific people')),
-              Divider(),
-              ListTile(leading: Icon(Icons.sync), title: Text('Same product everywhere'), subtitle: Text('The same permissions and content on web and mobile')),
-            ]),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
-  const _StatCard({required this.icon, required this.title, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primaryContainer, child: Icon(icon)),
-          const SizedBox(width: 12),
-          Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 3),
-            Text(value, style: const TextStyle(color: Colors.black54)),
-          ])),
-        ]),
-      ),
-    );
   }
 }

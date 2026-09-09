@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+: "${SUPABASE_URL:?SUPABASE_URL is required in Vercel Environment Variables}"
+: "${SUPABASE_PUBLISHABLE_KEY:?SUPABASE_PUBLISHABLE_KEY is required in Vercel Environment Variables}"
+
 FLUTTER_DIR="${HOME}/flutter"
 
 if [ ! -x "${FLUTTER_DIR}/bin/flutter" ]; then
@@ -12,7 +15,8 @@ export PATH="${FLUTTER_DIR}/bin:${PATH}"
 flutter --version
 flutter config --enable-web
 flutter pub get
+flutter analyze
 
 flutter build web --release \
-  --dart-define="SUPABASE_URL=${SUPABASE_URL:-}" \
-  --dart-define="SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY:-}"
+  --dart-define="SUPABASE_URL=${SUPABASE_URL}" \
+  --dart-define="SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}"

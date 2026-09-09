@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../shared_desks/shared_desks_screen.dart';
 import '../workspace/documents_screen.dart';
 import '../workspace/collaboration_modules.dart';
@@ -17,6 +18,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int index = Uri.base.queryParameters['buddy']?.isNotEmpty == true ? 5 : 0;
+  final _notifications = NotificationService();
 
   static const _labels = ['Home', 'Documents', 'Bills', 'Tasks', 'Khata', 'Buddies', 'Shared Desks'];
   static const _icons = [
@@ -37,8 +39,14 @@ class _AppShellState extends State<AppShell> {
       case 4: return const BuddyKhataScreen();
       case 5: return const BuddiesScreen();
       case 6: return const SharedDesksScreen();
-      default: return DashboardScreen(onNavigate: (value) => setState(() => index = value));
+      default: return DashboardScreen(onNavigate: _selectIndex);
     }
+  }
+
+  Future<void> _selectIndex(int value) async {
+    setState(() => index = value);
+    if (value == 3) await _notifications.markRead(kind: 'task');
+    if (value == 4) await _notifications.markRead(kind: 'khata');
   }
 
   Future<void> _signOut() async {
@@ -56,75 +64,109 @@ class _AppShellState extends State<AppShell> {
     if (confirmed) await AuthService().signOut();
   }
 
+  Widget _badgeIcon(IconData icon, int count) {
+    final child = Icon(icon);
+    if (count <= 0) return child;
+    return Badge(
+      label: Text(count > 99 ? '99+' : '$count'),
+      backgroundColor: const Color(0xFF2F80FF),
+      textColor: Colors.white,
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final wide = constraints.maxWidth >= 900;
-      if (wide) {
-        return Scaffold(
-          body: Row(children: [
-            NavigationRail(
-              extended: constraints.maxWidth >= 1160,
-              selectedIndex: index,
-              onDestinationSelected: (value) => setState(() => index = value),
-              leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(13)),
-                    child: const Icon(Icons.dashboard_customize, color: Colors.white),
-                  ),
-                  if (constraints.maxWidth >= 1160) ...[
-                    const SizedBox(width: 10),
-                    const Text('myDesk', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-                  ],
-                ]),
-              ),
-              trailing: Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      IconButton(tooltip: 'Account', onPressed: () => showAccountDialog(context), icon: const Icon(Icons.account_circle_outlined)),
-                      IconButton(tooltip: 'Sign out', onPressed: _signOut, icon: const Icon(Icons.logout)),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _notifications.stream(),
+      builder: (context, snapshot) {
+        final rows = snapshot.data ?? const <Map<String, dynamic>>[];
+        final unread = rows.where((n) => n['read_at'] == null).toList();
+        final taskCount = unread.where((n) => n['kind'] == 'task').length;
+        final khataCount = unread.where((n) => n['kind'] == 'khata').length;
+
+        int countFor(int i) => i == 3 ? taskCount : i == 4 ? khataCount : 0;
+
+        return LayoutBuilder(builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 900;
+          if (wide) {
+            return Scaffold(
+              body: Row(children: [
+                NavigationRail(
+                  extended: constraints.maxWidth >= 1160,
+                  selectedIndex: index,
+                  onDestinationSelected: _selectIndex,
+                  leading: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [Color(0xFF1473E6), Color(0xFF56A7FF)]),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(Icons.dashboard_customize, color: Colors.white),
+                      ),
+                      if (constraints.maxWidth >= 1160) ...[
+                        const SizedBox(width: 10),
+                        const Text('myDesk', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                      ],
                     ]),
                   ),
+                  trailing: Expanded(
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          IconButton(tooltip: 'Account', onPressed: () => showAccountDialog(context), icon: const Icon(Icons.account_circle_outlined)),
+                          IconButton(tooltip: 'Sign out', onPressed: _signOut, icon: const Icon(Icons.logout)),
+                        ]),
+                      ),
+                    ),
+                  ),
+                  destinations: List.generate(
+                    _labels.length,
+                    (i) => NavigationRailDestination(
+                      icon: _badgeIcon(_icons[i], countFor(i)),
+                      selectedIcon: _badgeIcon(_selectedIcon(_icons[i]), countFor(i)),
+                      label: Text(_labels[i]),
+                    ),
+                  ),
                 ),
-              ),
+                const VerticalDivider(width: 1),
+                Expanded(child: _pageForIndex()),
+              ]),
+            );
+          }
+
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('myDesk', style: TextStyle(fontWeight: FontWeight.w800)),
+              actions: [
+                IconButton(tooltip: 'Account', onPressed: () => showAccountDialog(context), icon: const Icon(Icons.account_circle_outlined)),
+                IconButton(tooltip: 'Sign out', onPressed: _signOut, icon: const Icon(Icons.logout)),
+              ],
+            ),
+            body: _pageForIndex(),
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: index,
+              labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+              onDestinationSelected: _selectIndex,
               destinations: List.generate(
                 _labels.length,
-                (i) => NavigationRailDestination(icon: Icon(_icons[i]), selectedIcon: Icon(_selectedIcon(_icons[i])), label: Text(_labels[i])),
+                (i) => NavigationDestination(
+                  icon: _badgeIcon(_icons[i], countFor(i)),
+                  selectedIcon: _badgeIcon(_selectedIcon(_icons[i]), countFor(i)),
+                  label: _labels[i],
+                ),
               ),
             ),
-            const VerticalDivider(width: 1),
-            Expanded(child: _pageForIndex()),
-          ]),
-        );
-      }
-
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('myDesk', style: TextStyle(fontWeight: FontWeight.w800)),
-          actions: [
-            IconButton(tooltip: 'Account', onPressed: () => showAccountDialog(context), icon: const Icon(Icons.account_circle_outlined)),
-            IconButton(tooltip: 'Sign out', onPressed: _signOut, icon: const Icon(Icons.logout)),
-          ],
-        ),
-        body: _pageForIndex(),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: index,
-          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-          onDestinationSelected: (value) => setState(() => index = value),
-          destinations: List.generate(
-            _labels.length,
-            (i) => NavigationDestination(icon: Icon(_icons[i]), selectedIcon: Icon(_selectedIcon(_icons[i])), label: _labels[i]),
-          ),
-        ),
-      );
-    });
+          );
+        });
+      },
+    );
   }
 
   static IconData _selectedIcon(IconData icon) {

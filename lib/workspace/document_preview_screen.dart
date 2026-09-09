@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DocumentPreviewScreen extends StatelessWidget {
   final String title;
@@ -45,15 +46,42 @@ class DocumentPreviewScreen extends StatelessWidget {
             )
           : _isPdf
               ? PdfViewer.uri(Uri.parse(url))
-              : _UnsupportedPreview(title: title, extension: _ext),
+              : _UnsupportedPreview(title: title, extension: _ext, url: url),
     );
   }
 }
 
-class _UnsupportedPreview extends StatelessWidget {
+class _UnsupportedPreview extends StatefulWidget {
   final String title;
   final String extension;
-  const _UnsupportedPreview({required this.title, required this.extension});
+  final String url;
+
+  const _UnsupportedPreview({required this.title, required this.extension, required this.url});
+
+  @override
+  State<_UnsupportedPreview> createState() => _UnsupportedPreviewState();
+}
+
+class _UnsupportedPreviewState extends State<_UnsupportedPreview> {
+  bool _opening = false;
+
+  Future<void> _openFile() async {
+    setState(() => _opening = true);
+    try {
+      final opened = await launchUrl(Uri.parse(widget.url), mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open this file.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open this file: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  bool get _isZip => widget.extension.toLowerCase() == 'zip';
 
   @override
   Widget build(BuildContext context) => Center(
@@ -63,16 +91,26 @@ class _UnsupportedPreview extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(28),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.insert_drive_file_outlined, size: 54),
+                Icon(_isZip ? Icons.folder_zip_outlined : Icons.insert_drive_file_outlined, size: 54),
                 const SizedBox(height: 14),
-                Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                Text(widget.title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 Text(
-                  extension.isEmpty
-                      ? 'This file type does not have an in-app preview yet.'
-                      : '${extension.toUpperCase()} files do not have an in-app preview yet.',
+                  _isZip
+                      ? 'ZIP archives cannot be previewed inside myDesk. You can download or open the archive on your device.'
+                      : widget.extension.isEmpty
+                          ? 'This file type does not have an in-app preview yet. You can still open or download the original file.'
+                          : '${widget.extension.toUpperCase()} files do not have an in-app preview yet. You can still open or download the original file.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: _opening ? null : _openFile,
+                  icon: _opening
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Icon(_isZip ? Icons.download_rounded : Icons.open_in_new_rounded),
+                  label: Text(_isZip ? 'Download ZIP' : 'Open file'),
                 ),
               ]),
             ),

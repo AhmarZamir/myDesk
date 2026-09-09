@@ -44,6 +44,13 @@ class DeskService {
     await _client.rpc('delete_desk', params: {'p_desk_id': deskId});
   }
 
+  Future<void> transferOwnership({required String deskId, required String newOwnerId}) async {
+    await _client.rpc('transfer_desk_ownership', params: {
+      'p_desk_id': deskId,
+      'p_new_owner_id': newOwnerId,
+    });
+  }
+
   Future<void> setMemberRole({
     required String deskId,
     required String userId,

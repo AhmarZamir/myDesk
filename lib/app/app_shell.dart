@@ -137,16 +137,18 @@ class _AppShellState extends State<AppShell> {
     return CircleAvatar(radius: radius, backgroundColor: const Color(0xFF1473E6), child: Text(initial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)));
   }
 
-  Widget _brand() => Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF1473E6), Color(0xFF56A7FF)]),
-            borderRadius: BorderRadius.circular(13),
-          ),
-          child: const Icon(Icons.dashboard_customize, color: Colors.white),
+  Widget _brandIcon() => Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [Color(0xFF1473E6), Color(0xFF56A7FF)]),
+          borderRadius: BorderRadius.circular(13),
         ),
+        child: const Icon(Icons.dashboard_customize, color: Colors.white),
+      );
+
+  Widget _brand() => Row(mainAxisSize: MainAxisSize.min, children: [
+        _brandIcon(),
         const SizedBox(width: 10),
         const Text('myDesk', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -.4)),
       ]);
@@ -173,7 +175,7 @@ class _AppShellState extends State<AppShell> {
                   onDestinationSelected: _selectIndex,
                   leading: Padding(
                     padding: const EdgeInsets.fromLTRB(14, 18, 14, 26),
-                    child: constraints.maxWidth >= 1160 ? _brand() : _brand().children.first,
+                    child: constraints.maxWidth >= 1160 ? _brand() : _brandIcon(),
                   ),
                   trailing: Expanded(
                     child: Align(

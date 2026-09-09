@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 import '../services/workspace_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -11,17 +12,23 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _service = WorkspaceService();
+  final _auth = AuthService();
   late Future<Map<String, dynamic>> _future;
+  late Future<Map<String, dynamic>?> _profile;
 
   @override
   void initState() {
     super.initState();
     _future = _service.dashboardSnapshot();
+    _profile = _auth.fetchProfile();
   }
 
   Future<void> _reload() async {
-    setState(() => _future = _service.dashboardSnapshot());
-    await _future;
+    setState(() {
+      _future = _service.dashboardSnapshot();
+      _profile = _auth.fetchProfile();
+    });
+    await Future.wait([_future, _profile]);
   }
 
   @override
@@ -31,9 +38,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const Text('Your Desk', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 5),
-          Text('What is yours, what was assigned to you, and what needs attention.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          FutureBuilder<Map<String, dynamic>?>(
+            future: _profile,
+            builder: (context, snapshot) {
+              final name = snapshot.data?['full_name']?.toString().trim();
+              final firstName = (name == null || name.isEmpty) ? 'there' : name.split(RegExp(r'\s+')).first;
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Hello, $firstName 👋', style: const TextStyle(fontSize: 31, fontWeight: FontWeight.w900, letterSpacing: -.6)),
+                const SizedBox(height: 6),
+                Text('Here’s what needs your attention today.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 15)),
+              ]);
+            },
+          ),
           const SizedBox(height: 24),
           FutureBuilder<Map<String, dynamic>>(
             future: _future,

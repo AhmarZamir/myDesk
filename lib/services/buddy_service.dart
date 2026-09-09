@@ -36,4 +36,11 @@ class BuddyService {
       'p_buddy_user_id': buddyUserId,
     });
   }
+
+  Future<void> addSharedDeskMemberAsBuddy({required String deskId, required String userId}) async {
+    await _client.rpc('add_shared_desk_member_as_buddy', params: {
+      'p_desk_id': deskId,
+      'p_user_id': userId,
+    });
+  }
 }

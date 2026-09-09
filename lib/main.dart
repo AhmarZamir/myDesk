@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/auth_gate.dart';
+import 'core/app_semantics.dart';
 import 'core/supabase_config.dart';
 
 Future<void> main() async {
@@ -39,7 +40,7 @@ class MyDeskApp extends StatelessWidget {
       onTertiary: Color(0xFF07111E),
       tertiaryContainer: Color(0xFF1D3557),
       onTertiaryContainer: Color(0xFFDCEBFF),
-      error: Color(0xFFFF5C73),
+      error: AppSemantics.outgoing,
       onError: Colors.white,
       errorContainer: Color(0xFF4A1720),
       onErrorContainer: Color(0xFFFFD9DE),
@@ -56,6 +57,13 @@ class MyDeskApp extends StatelessWidget {
       inversePrimary: Color(0xFF0A5FD1),
     );
 
+    final buttonOverlay = WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.pressed)) return Colors.white.withValues(alpha: .15);
+      if (states.contains(WidgetState.hovered)) return Colors.white.withValues(alpha: .08);
+      if (states.contains(WidgetState.focused)) return blueBright.withValues(alpha: .12);
+      return null;
+    });
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'myDesk',
@@ -65,6 +73,10 @@ class MyDeskApp extends StatelessWidget {
         colorScheme: scheme,
         scaffoldBackgroundColor: black,
         fontFamily: 'sans-serif',
+        hoverColor: blueBright.withValues(alpha: .07),
+        focusColor: blueBright.withValues(alpha: .11),
+        highlightColor: blueBright.withValues(alpha: .06),
+        splashColor: blueBright.withValues(alpha: .10),
         textTheme: ThemeData.dark().textTheme.apply(bodyColor: text, displayColor: text),
         appBarTheme: const AppBarTheme(
           backgroundColor: black,
@@ -82,6 +94,10 @@ class MyDeskApp extends StatelessWidget {
             borderRadius: BorderRadius.all(Radius.circular(22)),
             side: BorderSide(color: border, width: 0.8),
           ),
+        ),
+        listTileTheme: const ListTileThemeData(
+          iconColor: muted,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
         ),
         navigationRailTheme: const NavigationRailThemeData(
           backgroundColor: Color(0xFF090C12),
@@ -113,11 +129,11 @@ class MyDeskApp extends StatelessWidget {
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.all(Radius.circular(15)),
-            borderSide: BorderSide(color: Color(0xFFFF5C73)),
+            borderSide: BorderSide(color: AppSemantics.outgoing),
           ),
           focusedErrorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.all(Radius.circular(15)),
-            borderSide: BorderSide(color: Color(0xFFFF5C73), width: 1.7),
+            borderSide: BorderSide(color: AppSemantics.outgoing, width: 1.7),
           ),
         ),
         filledButtonTheme: FilledButtonThemeData(
@@ -127,7 +143,7 @@ class MyDeskApp extends StatelessWidget {
             minimumSize: const Size(0, 46),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
+          ).copyWith(overlayColor: buttonOverlay),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
@@ -136,6 +152,13 @@ class MyDeskApp extends StatelessWidget {
             minimumSize: const Size(0, 46),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ).copyWith(overlayColor: buttonOverlay),
+        ),
+        textButtonTheme: TextButtonThemeData(style: ButtonStyle(overlayColor: buttonOverlay)),
+        iconButtonTheme: IconButtonThemeData(
+          style: ButtonStyle(
+            overlayColor: buttonOverlay,
+            shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
           ),
         ),
         floatingActionButtonTheme: const FloatingActionButtonThemeData(backgroundColor: blue, foregroundColor: Colors.white),

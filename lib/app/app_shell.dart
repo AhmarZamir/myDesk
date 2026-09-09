@@ -4,6 +4,7 @@ import '../services/notification_service.dart';
 import '../shared_desks/shared_desks_hub_screen.dart';
 import '../workspace/documents_hub_screen.dart';
 import '../workspace/collaboration_modules.dart';
+import '../workspace/buddy_tasks_screen.dart';
 import '../workspace/khata_hub_screen.dart';
 import '../buddies/buddies_hub_screen.dart';
 import 'account_dialog.dart';
@@ -44,7 +45,7 @@ class _AppShellState extends State<AppShell> {
     switch (index) {
       case 1: return const DocumentsHubScreen();
       case 2: return const BillsScreen();
-      case 3: return const TasksScreen();
+      case 3: return const BuddyTasksScreen();
       case 4: return const KhataHubScreen();
       case 5: return const BuddiesHubScreen();
       case 6: return const SharedDesksHubScreen();

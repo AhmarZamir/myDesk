@@ -16,14 +16,13 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
   String _workspaceFilter = 'all';
   String _categoryFilter = 'all';
 
-  static const _categories = <String, (String, IconData)>{
-    'all': ('All categories', Icons.apps_rounded),
-    'id': ('IDs', Icons.badge_outlined),
-    'certificate': ('Certificates', Icons.workspace_premium_outlined),
-    'property': ('Property', Icons.home_work_outlined),
-    'medical': ('Medical', Icons.medical_information_outlined),
-    'receipt': ('Receipts', Icons.receipt_outlined),
-    'other': ('Other', Icons.description_outlined),
+  static const _categories = <String, _DocumentCategory>{
+    'id': _DocumentCategory('IDs', Icons.badge_outlined, Color(0xFF2F80FF), Color(0xFF102A52)),
+    'certificate': _DocumentCategory('Certificates', Icons.workspace_premium_outlined, Color(0xFF21C77A), Color(0xFF103326)),
+    'property': _DocumentCategory('Property', Icons.home_work_outlined, Color(0xFF7B61FF), Color(0xFF241D52)),
+    'medical': _DocumentCategory('Medical', Icons.medical_information_outlined, Color(0xFFFF4D6D), Color(0xFF401721)),
+    'receipt': _DocumentCategory('Receipts', Icons.receipt_long_outlined, Color(0xFFFF8A2A), Color(0xFF44270F)),
+    'other': _DocumentCategory('Others', Icons.folder_outlined, Color(0xFF8EA1B8), Color(0xFF202A36)),
   };
 
   @override
@@ -69,10 +68,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: category,
                   decoration: const InputDecoration(labelText: 'Category'),
-                  items: _categories.entries
-                      .where((e) => e.key != 'all')
-                      .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value.$1)))
-                      .toList(),
+                  items: _categories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value.label))).toList(),
                   onChanged: (v) => setLocal(() => category = v ?? 'other'),
                 ),
                 const SizedBox(height: 10),
@@ -279,11 +275,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => DocumentPreviewScreen(
-            title: '${doc['title']}',
-            url: url,
-            storagePath: path,
-          ),
+          builder: (_) => DocumentPreviewScreen(title: '${doc['title']}', url: url, storagePath: path),
         ),
       );
     } catch (e) {
@@ -322,13 +314,11 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  List<Map<String, dynamic>> _workspaceDocs(List<Map<String, dynamic>> docs) {
-    return docs.where((d) {
-      if (_workspaceFilter == 'all') return true;
-      if (_workspaceFilter == 'personal') return d['desk_id'] == null;
-      return '${d['desk_id']}' == _workspaceFilter;
-    }).toList();
-  }
+  List<Map<String, dynamic>> _workspaceDocs(List<Map<String, dynamic>> docs) => docs.where((d) {
+        if (_workspaceFilter == 'all') return true;
+        if (_workspaceFilter == 'personal') return d['desk_id'] == null;
+        return '${d['desk_id']}' == _workspaceFilter;
+      }).toList();
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -342,7 +332,7 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Documents & Vault', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 5),
-                Text('Browse by workspace and category, then preview and manage files right here.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                Text('Choose a space, then open a document category.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ]),
               FilledButton.icon(onPressed: _upload, icon: const Icon(Icons.upload_file), label: const Text('Upload document')),
             ],
@@ -362,102 +352,129 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
               final desks = List<Map<String, dynamic>>.from(snap.data![1] as List);
               final workspaceFilters = <String, String>{
                 'all': 'All',
-                'personal': 'My Desk',
+                'personal': 'Personal',
                 for (final d in desks) '${d['id']}': '${d['name']}',
               };
               if (!workspaceFilters.containsKey(_workspaceFilter)) _workspaceFilter = 'all';
 
               final inWorkspace = _workspaceDocs(docs);
               final visible = inWorkspace.where((d) => _categoryFilter == 'all' || '${d['category']}' == _categoryFilter).toList();
-
-              int countFor(String category) => category == 'all'
-                  ? inWorkspace.length
-                  : inWorkspace.where((d) => '${d['category']}' == category).length;
+              int countFor(String category) => inWorkspace.where((d) => '${d['category']}' == category).length;
 
               return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Spaces', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 9),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Wrap(
-                    spacing: 8,
+                    spacing: 10,
                     children: workspaceFilters.entries
                         .map((e) => ChoiceChip(
-                              label: Text(e.value),
+                              label: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), child: Text(e.value)),
                               selected: _workspaceFilter == e.key,
                               onSelected: (_) => setState(() => _workspaceFilter = e.key),
                             ))
                         .toList(),
                   ),
                 ),
-                const SizedBox(height: 24),
-                const Text('Categories', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 10),
-                LayoutBuilder(builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final columns = width >= 1050 ? 4 : width >= 700 ? 3 : width >= 430 ? 2 : 1;
-                  return GridView.count(
-                    crossAxisCount: columns,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: columns == 1 ? 4.1 : 2.25,
-                    children: _categories.entries.map((e) {
-                      final selected = _categoryFilter == e.key;
-                      return Card(
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(22),
-                          onTap: () => setState(() => _categoryFilter = e.key),
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Row(children: [
-                              CircleAvatar(
-                                backgroundColor: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primaryContainer,
-                                foregroundColor: selected ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).colorScheme.primary,
-                                child: Icon(e.value.$2),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(e.value.$1, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-                                    const SizedBox(height: 2),
-                                    Text('${countFor(e.key)} files', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                                  ],
-                                ),
-                              ),
-                              if (selected) Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
-                            ]),
+                const SizedBox(height: 22),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: LayoutBuilder(builder: (context, constraints) {
+                    final columns = constraints.maxWidth >= 560 ? 2 : 1;
+                    return GridView.count(
+                      crossAxisCount: columns,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: columns == 2 ? 2.55 : 4.0,
+                      children: _categories.entries.map((entry) {
+                        final category = entry.value;
+                        final selected = _categoryFilter == entry.key;
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          decoration: BoxDecoration(
+                            color: selected ? Theme.of(context).colorScheme.primary.withValues(alpha: .08) : Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant,
+                              width: selected ? 1.5 : 1,
+                            ),
                           ),
-                        ),
-                      );
-                    }).toList(),
-                  );
-                }),
-                const SizedBox(height: 24),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () => setState(() => _categoryFilter = selected ? 'all' : entry.key),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              child: Row(children: [
+                                Container(
+                                  width: 54,
+                                  height: 54,
+                                  decoration: BoxDecoration(color: category.background, borderRadius: BorderRadius.circular(16)),
+                                  child: Icon(category.icon, color: category.foreground, size: 28),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(category.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${countFor(entry.key)} ${countFor(entry.key) == 1 ? 'document' : 'documents'}',
+                                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (selected) Icon(Icons.check_circle_rounded, color: Theme.of(context).colorScheme.primary),
+                              ]),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 26),
                 Row(children: [
-                  Expanded(child: Text(_categories[_categoryFilter]!.$1, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
-                  Text('${visible.length} ${visible.length == 1 ? 'file' : 'files'}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  Expanded(
+                    child: Text(
+                      _categoryFilter == 'all' ? 'All documents' : _categories[_categoryFilter]!.label,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  if (_categoryFilter != 'all')
+                    TextButton.icon(
+                      onPressed: () => setState(() => _categoryFilter = 'all'),
+                      icon: const Icon(Icons.close, size: 17),
+                      label: const Text('Show all'),
+                    ),
+                  const SizedBox(width: 6),
+                  Text('${visible.length}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ]),
                 const SizedBox(height: 10),
                 if (visible.isEmpty)
                   const Card(child: Padding(padding: EdgeInsets.all(34), child: Center(child: Text('No documents in this category and space.')))),
                 ...visible.map((doc) {
                   final desk = desks.where((d) => '${d['id']}' == '${doc['desk_id']}').toList();
-                  final workspace = doc['desk_id'] == null ? 'My Desk' : (desk.isEmpty ? 'Shared Desk' : '${desk.first['name']}');
+                  final workspace = doc['desk_id'] == null ? 'Personal' : (desk.isEmpty ? 'Shared Desk' : '${desk.first['name']}');
                   final mine = doc['owner_id'] == _service.currentUserId;
-                  final category = '${doc['category']}';
+                  final categoryKey = '${doc['category']}';
+                  final category = _categories[categoryKey] ?? _categories['other']!;
                   return Card(
                     margin: const EdgeInsets.only(bottom: 10),
                     child: ListTile(
-                      leading: CircleAvatar(child: Icon(_categories[category]?.$2 ?? Icons.description_outlined)),
+                      leading: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: category.background, borderRadius: BorderRadius.circular(13)),
+                        child: Icon(category.icon, color: category.foreground),
+                      ),
                       title: Text('${doc['title']}', style: const TextStyle(fontWeight: FontWeight.w800)),
                       subtitle: Text([
                         workspace,
-                        _categories[category]?.$1 ?? category,
+                        category.label,
                         _visibility('${doc['visibility']}'),
                         if (doc['expires_at'] != null) 'Expires ${_date(doc['expires_at'])}',
                       ].join(' · ')),
@@ -489,11 +506,19 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
 
   String _visibility(String v) => v == 'desk' ? 'Desk members' : v == 'custom' ? 'Selected Buddies' : 'Private';
 
-  String _date(dynamic value) {
+  static String _date(dynamic value) {
     final d = value is DateTime ? value : DateTime.tryParse('${value ?? ''}');
     if (d == null) return '';
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
+}
+
+class _DocumentCategory {
+  final String label;
+  final IconData icon;
+  final Color foreground;
+  final Color background;
+  const _DocumentCategory(this.label, this.icon, this.foreground, this.background);
 }
 
 class _Avatar extends StatelessWidget {

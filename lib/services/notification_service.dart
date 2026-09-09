@@ -28,4 +28,10 @@ class NotificationService {
   }
 
   Future<void> markRead({String? kind}) => _db.rpc('mark_notifications_read', params: {'p_kind': kind});
+
+  Future<void> markOneRead(String notificationId) => _db
+      .from('notifications')
+      .update({'read_at': DateTime.now().toIso8601String()})
+      .eq('id', notificationId)
+      .eq('recipient_id', _uid);
 }

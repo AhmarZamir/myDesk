@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/app_semantics.dart';
 import '../services/workspace_service.dart';
 
 class BuddyKhataScreen extends StatefulWidget {
@@ -59,22 +60,11 @@ class _BuddyKhataScreenState extends State<BuddyKhataScreen> {
             if (snapshot.hasError) {
               return Card(child: Padding(padding: const EdgeInsets.all(24), child: Text('Could not load Khata: ${snapshot.error}')));
             }
-
             final buddies = List<Map<String, dynamic>>.from(snapshot.data![0] as List);
             final entries = List<Map<String, dynamic>>.from(snapshot.data![1] as List);
-
             return _tab == 0
-                ? _CustomersView(
-                    service: service,
-                    buddies: buddies,
-                    entries: entries,
-                    onChanged: _refresh,
-                  )
-                : _CommunityView(
-                    service: service,
-                    buddies: buddies,
-                    entries: entries,
-                  );
+                ? _CustomersView(service: service, buddies: buddies, entries: entries, onChanged: _refresh)
+                : _CommunityView(service: service, buddies: buddies, entries: entries);
           },
         ),
       ],
@@ -88,12 +78,7 @@ class _CustomersView extends StatelessWidget {
   final List<Map<String, dynamic>> entries;
   final VoidCallback onChanged;
 
-  const _CustomersView({
-    required this.service,
-    required this.buddies,
-    required this.entries,
-    required this.onChanged,
-  });
+  const _CustomersView({required this.service, required this.buddies, required this.entries, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +98,6 @@ class _CustomersView extends StatelessWidget {
     }
 
     final myEntries = entries.where((e) => e['created_by'] == service.currentUserId).toList();
-
     return LayoutBuilder(builder: (context, constraints) {
       final columns = constraints.maxWidth >= 1000 ? 3 : constraints.maxWidth >= 650 ? 2 : 1;
       return GridView.builder(
@@ -131,15 +115,12 @@ class _CustomersView extends StatelessWidget {
           final buddyId = buddy['user_id'] as String;
           final buddyEntries = myEntries.where((e) => e['buddy_user_id'] == buddyId).toList();
           final net = _netForCurrentUser(service, buddyEntries);
-
+          final color = _netColor(net);
           return Card(
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
               onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => BuddyLedgerScreen(buddy: buddy, readOnly: false)),
-                );
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => BuddyLedgerScreen(buddy: buddy, readOnly: false)));
                 onChanged();
               },
               child: Padding(
@@ -148,19 +129,20 @@ class _CustomersView extends StatelessWidget {
                   Row(children: [
                     _BuddyAvatar(name: '${buddy['full_name']}', url: buddy['avatar_url']?.toString()),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('${buddy['full_name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 2),
-                        Text('Your Khata · ${buddyEntries.length} ${buddyEntries.length == 1 ? 'entry' : 'entries'}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      ]),
-                    ),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('${buddy['full_name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 2),
+                      Text('Your Khata · ${buddyEntries.length} ${buddyEntries.length == 1 ? 'entry' : 'entries'}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    ])),
                     const Icon(Icons.chevron_right),
                   ]),
                   const Spacer(),
-                  Text(_netLabel(net, buddy['full_name']?.toString() ?? 'Buddy'), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  Text(_netLabel(net, buddy['full_name']?.toString() ?? 'Buddy'), style: TextStyle(color: color, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text('Rs. ${net.abs().toStringAsFixed(2)}', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: net == 0 ? null : Theme.of(context).colorScheme.primary)),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: Text('Rs. ${net.abs().toStringAsFixed(2)}', key: ValueKey(net), style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: color)),
+                  ),
                 ]),
               ),
             ),
@@ -217,35 +199,28 @@ class _CommunityView extends StatelessWidget {
           final buddyEntries = sharedEntries.where((e) => e['created_by'] == buddyId).toList();
           final net = _netForCurrentUser(service, buddyEntries);
           final name = buddy['full_name']?.toString() ?? 'Buddy';
-
+          final color = _netColor(net);
           return Card(
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => BuddyLedgerScreen(buddy: buddy, readOnly: true)),
-                );
-              },
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BuddyLedgerScreen(buddy: buddy, readOnly: true))),
               child: Padding(
                 padding: const EdgeInsets.all(18),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
                     _BuddyAvatar(name: name, url: buddy['avatar_url']?.toString()),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 2),
-                        Text('Shared with you · read-only', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      ]),
-                    ),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 2),
+                      Text('Shared with you · read-only', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    ])),
                     const Icon(Icons.visibility_outlined),
                   ]),
                   const Spacer(),
-                  Text(_netLabel(net, name), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  Text(_netLabel(net, name), style: TextStyle(color: color, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text('Rs. ${net.abs().toStringAsFixed(2)}', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: net == 0 ? null : Theme.of(context).colorScheme.primary)),
+                  Text('Rs. ${net.abs().toStringAsFixed(2)}', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: color)),
                 ]),
               ),
             ),
@@ -294,9 +269,9 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
             width: 440,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: true, icon: Icon(Icons.south_west), label: Text('They owe me')),
-                  ButtonSegment(value: false, icon: Icon(Icons.north_east), label: Text('I owe them')),
+                segments: [
+                  ButtonSegment(value: true, icon: const Icon(Icons.south_west, color: AppSemantics.incoming), label: Text('They owe me', style: TextStyle(color: theyOweMe ? AppSemantics.incoming : null))),
+                  ButtonSegment(value: false, icon: const Icon(Icons.north_east, color: AppSemantics.outgoing), label: Text('I owe them', style: TextStyle(color: !theyOweMe ? AppSemantics.outgoing : null))),
                 ],
                 selected: {theyOweMe},
                 onSelectionChanged: (v) => setLocal(() => theyOweMe = v.first),
@@ -306,7 +281,16 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
               const SizedBox(height: 12),
               TextField(controller: note, maxLines: 2, decoration: const InputDecoration(labelText: 'Note (optional)')),
               const SizedBox(height: 10),
-              Text('$buddyName will see the same entry in read-only mode from their own perspective.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: AppSemantics.soft(theyOweMe ? AppSemantics.incoming : AppSemantics.outgoing), borderRadius: BorderRadius.circular(12)),
+                child: Row(children: [
+                  Icon(theyOweMe ? Icons.add_circle_outline : Icons.remove_circle_outline, color: theyOweMe ? AppSemantics.incoming : AppSemantics.outgoing),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(theyOweMe ? 'This will count as money to receive from $buddyName.' : 'This will count as money you need to give $buddyName.')),
+                ]),
+              ),
             ]),
           ),
           actions: [
@@ -329,6 +313,7 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
       try {
         await service.addKhataEntry(amount: value, note: note.text, counterpartyName: buddyName, theyOweMe: theyOweMe, buddyUserId: buddyId);
         _refresh();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(theyOweMe ? 'Inflow added to $buddyName Khata.' : 'Outflow added to $buddyName Khata.')));
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add entry: $e')));
       }
@@ -344,7 +329,7 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
           content: const Text('This removes the entry from both sides of the shared ledger.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+            FilledButton(style: FilledButton.styleFrom(backgroundColor: AppSemantics.outgoing), onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
           ],
         ),
       ) ?? false;
@@ -365,7 +350,6 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (snapshot.hasError) return Center(child: Text('Could not load ledger: ${snapshot.error}'));
-
           final all = snapshot.data ?? [];
           final items = widget.readOnly
               ? all.where((e) => e['created_by'] == buddyId && e['buddy_user_id'] == service.currentUserId).toList()
@@ -389,16 +373,8 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
                 Container(
                   margin: const EdgeInsets.only(bottom: 14),
                   padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-                  ),
-                  child: const Row(children: [
-                    Icon(Icons.lock_outline),
-                    SizedBox(width: 10),
-                    Expanded(child: Text('Community ledger · read-only. Only the Buddy who owns this Khata can edit, settle, or delete entries.')),
-                  ]),
+                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(16), border: Border.all(color: Theme.of(context).colorScheme.outlineVariant)),
+                  child: const Row(children: [Icon(Icons.lock_outline), SizedBox(width: 10), Expanded(child: Text('Community ledger · read-only. Only the Buddy who owns this Khata can edit, settle, or delete entries.'))]),
                 ),
               _NetBalanceBar(buddyName: buddyName, net: net),
               const SizedBox(height: 14),
@@ -406,10 +382,10 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Row(children: [
-                    Expanded(child: _Summary(label: '$buddyName owes you', value: receivable)),
+                    Expanded(child: _Summary(label: '$buddyName owes you', value: receivable, color: AppSemantics.incoming, icon: Icons.south_west_rounded)),
                     Container(width: 1, height: 46, color: Theme.of(context).colorScheme.outlineVariant),
                     const SizedBox(width: 18),
-                    Expanded(child: _Summary(label: 'You owe $buddyName', value: payable)),
+                    Expanded(child: _Summary(label: 'You owe $buddyName', value: payable, color: AppSemantics.outgoing, icon: Icons.north_east_rounded)),
                   ]),
                 ),
               ),
@@ -423,32 +399,37 @@ class _BuddyLedgerScreenState extends State<BuddyLedgerScreen> {
                 final creatorReceivable = item['direction'] == 'receivable';
                 final receivableForMe = mine ? creatorReceivable : !creatorReceivable;
                 final settled = item['status'] == 'settled';
+                final semanticColor = AppSemantics.amountColor(incomingMoney: receivableForMe, settled: settled);
                 return Card(
                   margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    leading: CircleAvatar(child: Icon(receivableForMe ? Icons.south_west : Icons.north_east)),
-                    title: Text(receivableForMe ? 'Inflow' : 'Outflow', style: TextStyle(fontWeight: FontWeight.w800, decoration: settled ? TextDecoration.lineThrough : null)),
-                    subtitle: Text([
-                      receivableForMe ? '$buddyName owes you' : 'You owe $buddyName',
-                      settled ? 'settled' : 'open',
-                      if (widget.readOnly) 'Added by $buddyName · read-only',
-                      if ((item['note'] ?? '').toString().trim().isNotEmpty) '${item['note']}',
-                    ].join(' · ')),
-                    trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
-                      Text('${receivableForMe ? '+' : '-'} Rs. ${item['amount']}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                      if (!widget.readOnly && mine)
-                        PopupMenuButton<String>(
-                          onSelected: (value) async {
-                            if (value == 'settle') await service.settleKhata(item['id']);
-                            if (value == 'delete' && await _confirmDelete()) await service.deleteKhata(item['id']);
-                            _refresh();
-                          },
-                          itemBuilder: (_) => [
-                            if (!settled) const PopupMenuItem(value: 'settle', child: Text('Mark settled')),
-                            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                          ],
-                        ),
-                    ]),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(22),
+                    onTap: () {},
+                    child: ListTile(
+                      leading: CircleAvatar(backgroundColor: AppSemantics.soft(semanticColor), child: Icon(receivableForMe ? Icons.south_west : Icons.north_east, color: semanticColor)),
+                      title: Text(receivableForMe ? 'Inflow' : 'Outflow', style: TextStyle(fontWeight: FontWeight.w800, color: settled ? Theme.of(context).colorScheme.onSurfaceVariant : semanticColor, decoration: settled ? TextDecoration.lineThrough : null)),
+                      subtitle: Text([
+                        receivableForMe ? '$buddyName owes you' : 'You owe $buddyName',
+                        settled ? 'settled' : 'open',
+                        if (widget.readOnly) 'Added by $buddyName · read-only',
+                        if ((item['note'] ?? '').toString().trim().isNotEmpty) '${item['note']}',
+                      ].join(' · ')),
+                      trailing: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        Text('${receivableForMe ? '+' : '-'} Rs. ${item['amount']}', style: TextStyle(fontWeight: FontWeight.w900, color: semanticColor)),
+                        if (!widget.readOnly && mine)
+                          PopupMenuButton<String>(
+                            onSelected: (value) async {
+                              if (value == 'settle') await service.settleKhata(item['id']);
+                              if (value == 'delete' && await _confirmDelete()) await service.deleteKhata(item['id']);
+                              _refresh();
+                            },
+                            itemBuilder: (_) => [
+                              if (!settled) const PopupMenuItem(value: 'settle', child: Text('Mark settled')),
+                              const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                            ],
+                          ),
+                      ]),
+                    ),
                   ),
                 );
               }),
@@ -479,6 +460,12 @@ String _netLabel(double net, String buddyName) {
   return 'Settled';
 }
 
+Color _netColor(double net) {
+  if (net > 0) return AppSemantics.incoming;
+  if (net < 0) return AppSemantics.outgoing;
+  return Colors.grey;
+}
+
 class _NetBalanceBar extends StatelessWidget {
   final String buddyName;
   final double net;
@@ -488,27 +475,21 @@ class _NetBalanceBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final settled = net.abs() < 0.005;
     final positive = net > 0;
+    final color = settled ? Theme.of(context).colorScheme.onSurfaceVariant : positive ? AppSemantics.incoming : AppSemantics.outgoing;
     final icon = settled ? Icons.check_circle_outline : positive ? Icons.call_received_rounded : Icons.call_made_rounded;
     final message = settled
         ? 'Settled — balance is Rs. 0.00'
         : positive
             ? '$buddyName owes you Rs. ${net.abs().toStringAsFixed(2)}'
             : 'You owe $buddyName Rs. ${net.abs().toStringAsFixed(2)}';
-
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 240),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: settled ? Theme.of(context).colorScheme.surfaceContainerHighest : Theme.of(context).colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: settled ? Theme.of(context).colorScheme.outlineVariant : Theme.of(context).colorScheme.primary.withValues(alpha: .45)),
-      ),
+      decoration: BoxDecoration(color: settled ? Theme.of(context).colorScheme.surfaceContainerHighest : AppSemantics.soft(color), borderRadius: BorderRadius.circular(18), border: Border.all(color: color.withValues(alpha: .55))),
       child: Row(children: [
-        CircleAvatar(
-          backgroundColor: settled ? Theme.of(context).colorScheme.surface : Theme.of(context).colorScheme.primary,
-          child: Icon(icon, color: settled ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onPrimary),
-        ),
+        CircleAvatar(backgroundColor: settled ? Theme.of(context).colorScheme.surface : color, child: Icon(icon, color: settled ? Theme.of(context).colorScheme.onSurface : Colors.white)),
         const SizedBox(width: 14),
-        Expanded(child: Text(message, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900))),
+        Expanded(child: AnimatedSwitcher(duration: const Duration(milliseconds: 220), child: Text(message, key: ValueKey(message), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: color)))),
       ]),
     );
   }
@@ -533,12 +514,14 @@ class _BuddyAvatar extends StatelessWidget {
 class _Summary extends StatelessWidget {
   final String label;
   final double value;
-  const _Summary({required this.label, required this.value});
+  final Color color;
+  final IconData icon;
+  const _Summary({required this.label, required this.value, required this.color, required this.icon});
 
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        Row(children: [Icon(icon, size: 17, color: color), const SizedBox(width: 6), Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontWeight: FontWeight.w700)))]),
         const SizedBox(height: 5),
-        Text('Rs. ${value.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+        AnimatedSwitcher(duration: const Duration(milliseconds: 220), child: Text('Rs. ${value.toStringAsFixed(2)}', key: ValueKey(value), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color))),
       ]);
 }

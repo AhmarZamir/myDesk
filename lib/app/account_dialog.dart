@@ -2,10 +2,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 
-Future<void> showAccountDialog(BuildContext context) async {
+Future<Map<String, dynamic>?> showAccountDialog(BuildContext context) async {
   final auth = AuthService();
   var profile = await auth.fetchProfile();
-  if (!context.mounted) return;
+  if (!context.mounted) return profile;
 
   final name = TextEditingController(text: profile?['full_name']?.toString() ?? '');
   bool saving = false;
@@ -107,6 +107,7 @@ Future<void> showAccountDialog(BuildContext context) async {
                     setLocal(() => saving = true);
                     try {
                       await auth.updateProfile(name.text);
+                      profile = await auth.fetchProfile();
                       if (dialogContext.mounted) {
                         Navigator.pop(dialogContext);
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated.')));
@@ -128,4 +129,5 @@ Future<void> showAccountDialog(BuildContext context) async {
   );
 
   name.dispose();
+  return profile;
 }

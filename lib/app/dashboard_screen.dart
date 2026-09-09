@@ -5,7 +5,8 @@ import '../services/workspace_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
-  const DashboardScreen({super.key, required this.onNavigate});
+  final Future<void> Function({required String kind, required String entityId, String? title, String? body, String? notificationId}) onOpenEntity;
+  const DashboardScreen({super.key, required this.onNavigate, required this.onOpenEntity});
   @override State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
@@ -21,13 +22,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _load() { _future = _service.dashboardSnapshot(); _profile = _auth.fetchProfile(); _activity = _notifications.recent(limit: 8); }
   Future<void> _reload() async { setState(_load); await Future.wait([_future, _profile, _activity]); }
 
+  String _activityKind(Map<String,dynamic> item) {
+    final kind = '${item['kind']}';
+    if (kind == 'general' && '${item['title']}'.toLowerCase().contains('bill')) return 'bill';
+    return kind;
+  }
+
   Future<void> _openSearch() async {
     final results = await Future.wait<dynamic>([_service.documents(), _service.bills(), _service.tasks(), _service.buddies(), _service.desks()]);
     if (!mounted) return;
     final all = <Map<String,dynamic>>[
-      ...List<Map<String,dynamic>>.from(results[0]).map((e) => {'type':'Document','title':'${e['title']}','subtitle':'${e['category']}','target':1}),
-      ...List<Map<String,dynamic>>.from(results[1]).map((e) => {'type':'Bill','title':'${e['title']}','subtitle':'Rs. ${e['amount']} · ${e['status']}','target':2}),
-      ...List<Map<String,dynamic>>.from(results[2]).map((e) => {'type':'Task','title':'${e['title']}','subtitle':'${e['status']} · ${e['priority']}','target':3}),
+      ...List<Map<String,dynamic>>.from(results[0]).map((e) => {'type':'Document','title':'${e['title']}','subtitle':'${e['category']}','target':1,'kind':'document','id':'${e['id']}'}),
+      ...List<Map<String,dynamic>>.from(results[1]).map((e) => {'type':'Bill','title':'${e['title']}','subtitle':'Rs. ${e['amount']} · ${e['status']}','target':2,'kind':'bill','id':'${e['id']}'}),
+      ...List<Map<String,dynamic>>.from(results[2]).map((e) => {'type':'Task','title':'${e['title']}','subtitle':'${e['status']} · ${e['priority']}','target':3,'kind':'task','id':'${e['id']}'}),
       ...List<Map<String,dynamic>>.from(results[3]).map((e) => {'type':'Buddy','title':'${e['full_name']}','subtitle':'Connected Buddy','target':5}),
       ...List<Map<String,dynamic>>.from(results[4]).map((e) => {'type':'Shared Desk','title':'${e['name']}','subtitle':'${e['type']} · ${e['role']}','target':6}),
     ];
@@ -39,7 +46,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         content: SizedBox(width: 620, height: 460, child: Column(children: [
           TextField(controller: controller, autofocus: true, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search documents, tasks, bills, Buddies and desks'), onChanged: (v) => setLocal(() => query = v)),
           const SizedBox(height: 12),
-          Expanded(child: shown.isEmpty ? const Center(child: Text('No matching items')) : ListView.separated(itemCount: shown.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (_, i) { final e = shown[i]; return ListTile(leading: CircleAvatar(child: Text('${e['type']}'[0])), title: Text('${e['title']}', style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text('${e['type']} · ${e['subtitle']}'), onTap: () { Navigator.pop(context); widget.onNavigate(e['target'] as int); }); })),
+          Expanded(child: shown.isEmpty ? const Center(child: Text('No matching items')) : ListView.separated(itemCount: shown.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (_, i) {
+            final e = shown[i];
+            return ListTile(
+              leading: CircleAvatar(child: Text('${e['type']}'[0])),
+              title: Text('${e['title']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text('${e['type']} · ${e['subtitle']}'),
+              onTap: () async {
+                Navigator.pop(context);
+                if (e['id'] != null && e['kind'] != null) {
+                  await widget.onOpenEntity(kind: '${e['kind']}', entityId: '${e['id']}', title: '${e['title']}', body: '${e['subtitle']}');
+                } else {
+                  widget.onNavigate(e['target'] as int);
+                }
+              },
+            );
+          })),
         ])),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
       );
@@ -77,12 +99,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _MetricCard(icon: Icons.account_balance_wallet_outlined, label: 'Open Khata', value: '${data['open_khata']}', onTap: () => widget.onNavigate(4)),
             _MetricCard(icon: Icons.groups_outlined, label: 'Shared Desks', value: '${data['desks']}', onTap: () => widget.onNavigate(6)),
           ]); }),
-          if (assigned.isNotEmpty) ...[const SizedBox(height: 28), Row(children: [const Expanded(child: Text('Assigned to you', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))), TextButton(onPressed: () => widget.onNavigate(3), child: const Text('View all'))]), const SizedBox(height: 8), ...assigned.take(5).map((task) => _AttentionTile(icon: Icons.assignment_ind_outlined, title: '${task['title']}', subtitle: '${_status(task['status'])}${task['due_date'] != null ? ' · due ${_formatDate(task['due_date'])}' : ''}', action: 'Open task', onTap: () => widget.onNavigate(3)))],
-          const SizedBox(height: 26), Row(children: [const Expanded(child: Text('Needs attention', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))), IconButton(tooltip: 'Refresh', onPressed: _reload, icon: const Icon(Icons.refresh))]), const SizedBox(height: 10),
+          if (assigned.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            Row(children: [const Expanded(child: Text('Assigned to you', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))), TextButton(onPressed: () => widget.onNavigate(3), child: const Text('View all'))]),
+            const SizedBox(height: 8),
+            ...assigned.take(5).map((task) => _AttentionTile(
+              icon: Icons.assignment_ind_outlined,
+              title: '${task['title']}',
+              subtitle: '${_status(task['status'])}${task['due_date'] != null ? ' · due ${_formatDate(task['due_date'])}' : ''}',
+              action: 'Open task',
+              onTap: () => widget.onOpenEntity(kind: 'task', entityId: '${task['id']}', title: '${task['title']}'),
+            )),
+          ],
+          const SizedBox(height: 26),
+          Row(children: [const Expanded(child: Text('Needs attention', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))), IconButton(tooltip: 'Refresh', onPressed: _reload, icon: const Icon(Icons.refresh))]),
+          const SizedBox(height: 10),
           if (overdue.isEmpty && dueTasks.isEmpty && expiring.isEmpty) const Card(child: ListTile(leading: CircleAvatar(child: Icon(Icons.check_circle_outline)), title: Text('You are caught up', style: TextStyle(fontWeight: FontWeight.w700)), subtitle: Text('No overdue bills, upcoming tasks, or documents expiring in the next 30 days.'))),
-          ...overdue.take(4).map((bill) => _AttentionTile(icon: Icons.warning_amber_rounded, title: '${bill['title']}', subtitle: 'Bill overdue · Rs. ${bill['amount']} · due ${bill['due_date']}', action: 'View bills', onTap: () => widget.onNavigate(2))),
-          ...dueTasks.take(4).map((task) => _AttentionTile(icon: Icons.schedule, title: '${task['title']}', subtitle: 'Task due soon · ${_formatDate(task['due_date'])}${task['assignee_name'] != null ? ' · ${task['assignee_name']}' : ''}', action: 'View tasks', onTap: () => widget.onNavigate(3))),
-          ...expiring.take(4).map((doc) => _AttentionTile(icon: Icons.event_busy_outlined, title: '${doc['title']}', subtitle: 'Document expires ${_formatDate(doc['expires_at'])}', action: 'View document', onTap: () => widget.onNavigate(1))),
+          ...overdue.take(4).map((bill) => _AttentionTile(icon: Icons.warning_amber_rounded, title: '${bill['title']}', subtitle: 'Bill overdue · Rs. ${bill['amount']} · due ${bill['due_date']}', action: 'Open bill', onTap: () => widget.onOpenEntity(kind: 'bill', entityId: '${bill['id']}', title: '${bill['title']}'))),
+          ...dueTasks.take(4).map((task) => _AttentionTile(icon: Icons.schedule, title: '${task['title']}', subtitle: 'Task due soon · ${_formatDate(task['due_date'])}${task['assignee_name'] != null ? ' · ${task['assignee_name']}' : ''}', action: 'Open task', onTap: () => widget.onOpenEntity(kind: 'task', entityId: '${task['id']}', title: '${task['title']}'))),
+          ...expiring.take(4).map((doc) => _AttentionTile(icon: Icons.event_busy_outlined, title: '${doc['title']}', subtitle: 'Document expires ${_formatDate(doc['expires_at'])}', action: 'Open document', onTap: () => widget.onOpenEntity(kind: 'document', entityId: '${doc['id']}', title: '${doc['title']}'))),
         ]);
       }),
       const SizedBox(height: 26),
@@ -90,7 +125,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       FutureBuilder<List<Map<String,dynamic>>>(future: _activity, builder: (context, snap) {
         final items = snap.data ?? [];
         if (items.isEmpty) return const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('No recent collaboration activity yet.')));
-        return Card(child: Column(children: items.map((n) => ListTile(leading: CircleAvatar(child: Icon(_activityIcon('${n['kind']}'))), title: Text('${n['title']}', style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: (n['body'] ?? '').toString().isEmpty ? null : Text('${n['body']}'))).toList()));
+        return Card(child: Column(children: items.map((n) {
+          final kind = _activityKind(n);
+          final entityId = n['entity_id']?.toString();
+          final canOpen = entityId != null && const {'task','khata','document','bill'}.contains(kind);
+          return ListTile(
+            leading: CircleAvatar(child: Icon(_activityIcon('${n['kind']}'))),
+            title: Text('${n['title']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: (n['body'] ?? '').toString().isEmpty ? null : Text('${n['body']}'),
+            trailing: canOpen ? const Icon(Icons.chevron_right) : null,
+            onTap: canOpen ? () => widget.onOpenEntity(kind: kind, entityId: entityId, title: '${n['title']}', body: n['body']?.toString(), notificationId: '${n['id']}') : null,
+          );
+        }).toList()));
       }),
     ]),
   );
@@ -101,4 +147,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class _MetricCard extends StatelessWidget { final IconData icon; final String label; final String value; final VoidCallback onTap; const _MetricCard({required this.icon, required this.label, required this.value, required this.onTap}); @override Widget build(BuildContext context) => Card(child: InkWell(borderRadius: BorderRadius.circular(20), onTap: onTap, child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primaryContainer, child: Icon(icon, color: Theme.of(context).colorScheme.primary)), const Spacer(), Text(value, style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900)), const SizedBox(height: 2), Text(label)])))); }
-class _AttentionTile extends StatelessWidget { final IconData icon; final String title; final String subtitle; final String action; final VoidCallback onTap; const _AttentionTile({required this.icon, required this.title, required this.subtitle, required this.action, required this.onTap}); @override Widget build(BuildContext context) => Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(leading: CircleAvatar(child: Icon(icon)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(subtitle), trailing: TextButton(onPressed: onTap, child: Text(action)), onTap: onTap)); }
+class _AttentionTile extends StatelessWidget { final IconData icon; final String title; final String subtitle; final String action; final Future<void> Function() onTap; const _AttentionTile({required this.icon, required this.title, required this.subtitle, required this.action, required this.onTap}); @override Widget build(BuildContext context) => Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(leading: CircleAvatar(child: Icon(icon)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(subtitle), trailing: TextButton(onPressed: onTap, child: Text(action)), onTap: onTap)); }

@@ -59,11 +59,7 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _openAccount() async {
     final updated = await showAccountDialog(context);
-    if (mounted) {
-      setState(() {
-        _profile = Future.value(updated);
-      });
-    }
+    if (mounted) setState(() => _profile = Future.value(updated));
   }
 
   Future<void> _signOut() async {
@@ -90,6 +86,82 @@ class _AppShellState extends State<AppShell> {
       textColor: Colors.white,
       child: child,
     );
+  }
+
+  int _notificationTarget(Map<String, dynamic> item) {
+    final kind = '${item['kind']}';
+    final title = '${item['title']}'.toLowerCase();
+    if (kind == 'task') return 3;
+    if (kind == 'khata') return 4;
+    if (kind == 'document') return 1;
+    if (title.contains('bill')) return 2;
+    if (kind == 'buddy') return 5;
+    if (kind == 'desk') return 6;
+    return 0;
+  }
+
+  Widget _notificationButton(List<Map<String, dynamic>> rows) {
+    final unreadCount = rows.where((n) => n['read_at'] == null).length;
+    return PopupMenuButton<int>(
+      tooltip: 'Notifications',
+      offset: const Offset(0, 50),
+      constraints: const BoxConstraints(minWidth: 320, maxWidth: 390),
+      onSelected: (target) async {
+        if (target == -1) {
+          await _notifications.markRead();
+          return;
+        }
+        await _selectIndex(target);
+      },
+      itemBuilder: (_) {
+        final recent = rows.take(8).toList();
+        return [
+          PopupMenuItem<int>(
+            enabled: false,
+            child: Row(children: [
+              const Expanded(child: Text('Notifications', style: TextStyle(fontWeight: FontWeight.w800))),
+              if (unreadCount > 0) Text('$unreadCount new', style: const TextStyle(color: Color(0xFF56A7FF), fontWeight: FontWeight.w700)),
+            ]),
+          ),
+          if (recent.isEmpty)
+            const PopupMenuItem<int>(enabled: false, child: Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('You are all caught up.'))),
+          ...recent.map((n) {
+            final unread = n['read_at'] == null;
+            return PopupMenuItem<int>(
+              value: _notificationTarget(n),
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  radius: 17,
+                  backgroundColor: unread ? const Color(0xFF1473E6) : null,
+                  child: Icon(_notificationIcon('${n['kind']}'), size: 18, color: unread ? Colors.white : null),
+                ),
+                title: Text('${n['title']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: unread ? FontWeight.w800 : FontWeight.w600)),
+                subtitle: (n['body'] ?? '').toString().trim().isEmpty ? null : Text('${n['body']}', maxLines: 2, overflow: TextOverflow.ellipsis),
+              ),
+            );
+          }),
+          if (unreadCount > 0) const PopupMenuDivider(),
+          if (unreadCount > 0) const PopupMenuItem<int>(value: -1, child: Center(child: Text('Mark all as read'))),
+        ];
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: _badgeIcon(Icons.notifications_none_rounded, unreadCount),
+      ),
+    );
+  }
+
+  IconData _notificationIcon(String kind) {
+    switch (kind) {
+      case 'task': return Icons.task_alt;
+      case 'khata': return Icons.account_balance_wallet_outlined;
+      case 'document': return Icons.description_outlined;
+      case 'buddy': return Icons.person_add_alt_1;
+      case 'desk': return Icons.groups_outlined;
+      default: return Icons.notifications_none;
+    }
   }
 
   Widget _profileButton() {
@@ -135,28 +207,16 @@ class _AppShellState extends State<AppShell> {
 
   Widget _avatar(String? url, String name, {double radius = 18}) {
     if (url != null && url.isNotEmpty) {
-      return CircleAvatar(
-        key: ValueKey(url),
-        radius: radius,
-        backgroundImage: NetworkImage(url),
-        backgroundColor: const Color(0xFF10192B),
-      );
+      return CircleAvatar(key: ValueKey(url), radius: radius, backgroundImage: NetworkImage(url), backgroundColor: const Color(0xFF10192B));
     }
     final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: const Color(0xFF1473E6),
-      child: Text(initial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
-    );
+    return CircleAvatar(radius: radius, backgroundColor: const Color(0xFF1473E6), child: Text(initial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)));
   }
 
   Widget _brandIcon() => Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFF1473E6), Color(0xFF56A7FF)]),
-          borderRadius: BorderRadius.circular(13),
-        ),
+        decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF1473E6), Color(0xFF56A7FF)]), borderRadius: BorderRadius.circular(13)),
         child: const Icon(Icons.dashboard_customize, color: Colors.white),
       );
 
@@ -188,11 +248,7 @@ class _AppShellState extends State<AppShell> {
                   onDestinationSelected: _selectIndex,
                   destinations: List.generate(
                     _labels.length,
-                    (i) => NavigationRailDestination(
-                      icon: _badgeIcon(_icons[i], countFor(i)),
-                      selectedIcon: _badgeIcon(_selectedIcon(_icons[i]), countFor(i)),
-                      label: Text(_labels[i]),
-                    ),
+                    (i) => NavigationRailDestination(icon: _badgeIcon(_icons[i], countFor(i)), selectedIcon: _badgeIcon(_selectedIcon(_icons[i]), countFor(i)), label: Text(_labels[i])),
                   ),
                 ),
                 const VerticalDivider(width: 1),
@@ -204,6 +260,8 @@ class _AppShellState extends State<AppShell> {
                       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant))),
                       child: Row(children: [
                         Expanded(child: Text(_labels[index], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+                        _notificationButton(rows),
+                        const SizedBox(width: 6),
                         _profileButton(),
                       ]),
                     ),
@@ -215,11 +273,7 @@ class _AppShellState extends State<AppShell> {
           }
 
           return Scaffold(
-            appBar: AppBar(
-              titleSpacing: 18,
-              title: _brand(),
-              actions: [_profileButton()],
-            ),
+            appBar: AppBar(titleSpacing: 18, title: _brand(), actions: [_notificationButton(rows), _profileButton()]),
             body: _pageForIndex(),
             bottomNavigationBar: NavigationBar(
               selectedIndex: index,
@@ -227,11 +281,7 @@ class _AppShellState extends State<AppShell> {
               onDestinationSelected: _selectIndex,
               destinations: List.generate(
                 _labels.length,
-                (i) => NavigationDestination(
-                  icon: _badgeIcon(_icons[i], countFor(i)),
-                  selectedIcon: _badgeIcon(_selectedIcon(_icons[i]), countFor(i)),
-                  label: _labels[i],
-                ),
+                (i) => NavigationDestination(icon: _badgeIcon(_icons[i], countFor(i)), selectedIcon: _badgeIcon(_selectedIcon(_icons[i]), countFor(i)), label: _labels[i]),
               ),
             ),
           );

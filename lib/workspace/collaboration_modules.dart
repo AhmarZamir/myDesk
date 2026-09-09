@@ -73,7 +73,8 @@ class _BillsScreenState extends State<BillsScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String?>(
-                  value: deskId,
+                  key: ValueKey('bill-desk-$deskId'),
+                  initialValue: deskId,
                   decoration: const InputDecoration(labelText: 'Workspace'),
                   items: [
                     const DropdownMenuItem<String?>(value: null, child: Text('Personal bill')),
@@ -91,7 +92,8 @@ class _BillsScreenState extends State<BillsScreen> {
                 if (deskId != null) ...[
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: assignedTo,
+                    key: ValueKey('bill-assignee-$assignedTo'),
+                    initialValue: assignedTo,
                     decoration: const InputDecoration(labelText: 'Responsible person'),
                     items: members.map((m) => DropdownMenuItem<String>(
                       value: m['user_id'] as String,
@@ -264,14 +266,15 @@ class _TasksScreenState extends State<TasksScreen> {
                 TextField(controller: description, maxLines: 3, decoration: const InputDecoration(labelText: 'Description (optional)')),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: priority,
+                  initialValue: priority,
                   decoration: const InputDecoration(labelText: 'Priority'),
                   items: const ['low', 'medium', 'high'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                   onChanged: (v) => setLocal(() => priority = v ?? 'medium'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String?>(
-                  value: deskId,
+                  key: ValueKey('task-desk-$deskId'),
+                  initialValue: deskId,
                   decoration: const InputDecoration(labelText: 'Workspace'),
                   items: [
                     const DropdownMenuItem<String?>(value: null, child: Text('Personal task')),
@@ -289,7 +292,8 @@ class _TasksScreenState extends State<TasksScreen> {
                 if (deskId != null) ...[
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: assigneeId,
+                    key: ValueKey('task-assignee-$assigneeId'),
+                    initialValue: assigneeId,
                     decoration: const InputDecoration(labelText: 'Assign to'),
                     items: members.map((m) => DropdownMenuItem<String>(
                       value: m['user_id'] as String,

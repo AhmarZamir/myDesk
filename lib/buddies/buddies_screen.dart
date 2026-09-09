@@ -1,7 +1,9 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/buddy_service.dart';
 import '../services/desk_service.dart';
+import '../services/workspace_service.dart';
 
 class BuddiesScreen extends StatefulWidget {
   const BuddiesScreen({super.key});
@@ -13,6 +15,7 @@ class BuddiesScreen extends StatefulWidget {
 class _BuddiesScreenState extends State<BuddiesScreen> {
   final _service = BuddyService();
   final _deskService = DeskService();
+  final _workspace = WorkspaceService();
   late Future<List<Map<String, dynamic>>> _future;
   bool _handledReferral = false;
 
@@ -55,7 +58,7 @@ class _BuddiesScreenState extends State<BuddiesScreen> {
           content: SizedBox(
             width: 500,
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Send this link to someone you trust. After they sign in, the connection will be added to both Buddy lists.'),
+              const Text('Send this link to someone you trust. After they sign in, the connection is available to both of you across myDesk.'),
               const SizedBox(height: 14),
               SelectableText(link, style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 10),
@@ -106,10 +109,82 @@ class _BuddiesScreenState extends State<BuddiesScreen> {
     controller.dispose();
   }
 
+  Future<void> _shareDocument(Map<String, dynamic> buddy) async {
+    final picked = await FilePicker.platform.pickFiles(withData: true);
+    if (picked == null || picked.files.single.bytes == null || !mounted) return;
+    final file = picked.files.single;
+    if (file.size > WorkspaceService.maxDocumentBytes) {
+      _message('Files must be 15 MB or smaller.');
+      return;
+    }
+
+    final title = TextEditingController(text: file.name);
+    String category = 'other';
+    DateTime? expiresAt;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text('Share with ${buddy['full_name']}'),
+          content: SizedBox(
+            width: 480,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: category,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: const ['id', 'certificate', 'property', 'medical', 'receipt', 'other']
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (v) => setLocal(() => category = v ?? 'other'),
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(expiresAt == null ? 'No expiry date' : 'Expires ${expiresAt!.toLocal().toString().split(' ').first}'),
+                trailing: const Icon(Icons.calendar_month),
+                onTap: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 3650)),
+                  );
+                  if (pickedDate != null) setLocal(() => expiresAt = pickedDate);
+                },
+              ),
+              const SizedBox(height: 8),
+              const Text('This is a direct Buddy share. No Shared Desk or group is required.'),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(onPressed: title.text.trim().isEmpty ? null : () => Navigator.pop(context, true), child: const Text('Share')),
+          ],
+        ),
+      ),
+    );
+    if (ok == true) {
+      try {
+        await _workspace.uploadDocument(
+          title: title.text,
+          category: category,
+          fileName: file.name,
+          bytes: file.bytes!,
+          visibility: 'custom',
+          recipientIds: [buddy['user_id'] as String],
+          expiresAt: expiresAt,
+        );
+        _message('Document shared directly with ${buddy['full_name']}.');
+      } catch (e) {
+        _message('Could not share document: $e');
+      }
+    }
+    title.dispose();
+  }
+
   Future<void> _addToDesk(Map<String, dynamic> buddy) async {
-    final desks = (await _deskService.fetchMyDesks())
-        .where((d) => d['role'] == 'owner' || d['role'] == 'admin')
-        .toList();
+    final desks = (await _deskService.fetchMyDesks()).where((d) => d['role'] == 'owner' || d['role'] == 'admin').toList();
     if (!mounted) return;
     if (desks.isEmpty) {
       _message('You need an owned/admin Shared Desk first.');
@@ -155,8 +230,7 @@ class _BuddiesScreenState extends State<BuddiesScreen> {
               FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
             ],
           ),
-        ) ??
-        false;
+        ) ?? false;
     if (!ok) return;
     try {
       await _service.removeBuddy(buddy['user_id'] as String);
@@ -221,13 +295,15 @@ class _BuddiesScreenState extends State<BuddiesScreen> {
                 child: ListTile(
                   leading: CircleAvatar(child: Text(_initials('${buddy['full_name']}'))),
                   title: Text('${buddy['full_name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text('Connected Buddy · available for direct sharing and Khata'),
+                  subtitle: const Text('Connected Buddy · direct sharing · shared Khata · reusable in desks'),
                   trailing: PopupMenuButton<String>(
                     onSelected: (value) async {
+                      if (value == 'share') await _shareDocument(buddy);
                       if (value == 'desk') await _addToDesk(buddy);
                       if (value == 'remove') await _remove(buddy);
                     },
                     itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'share', child: Text('Share document directly')),
                       PopupMenuItem(value: 'desk', child: Text('Add to Shared Desk')),
                       PopupMenuItem(value: 'remove', child: Text('Remove Buddy')),
                     ],

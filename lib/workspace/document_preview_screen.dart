@@ -44,12 +44,7 @@ class DocumentPreviewScreen extends StatelessWidget {
               ),
             )
           : _isPdf
-              ? PdfViewer.uri(
-                  Uri.parse(url),
-                  params: const PdfViewerParams(
-                    enableTextSelection: true,
-                  ),
-                )
+              ? PdfViewer.uri(Uri.parse(url))
               : _UnsupportedPreview(title: title, extension: _ext),
     );
   }

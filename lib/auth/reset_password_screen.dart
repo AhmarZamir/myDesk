@@ -75,7 +75,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                             icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
                           ),
                         ),
-                        validator: (v) => (v == null || v.length < 8) ? 'Use at least 8 characters' : null,
+                        validator: (v) => (v == null || v.length < 6) ? 'Use at least 6 characters' : null,
                       ),
                       const SizedBox(height: 14),
                       TextFormField(

@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../core/ui_components.dart';
 import '../services/workspace_service.dart';
 import 'document_category_screen.dart';
 
@@ -48,8 +49,9 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
     final buddies = List<Map<String, dynamic>>.from(results[1]);
     final title = TextEditingController(text: file.name);
     String category = 'other';
-    String visibility = 'private';
-    String? deskId;
+    final activeDesk = desks.where((d) => '${d['id']}' == _workspaceFilter).cast<Map<String, dynamic>?>().firstOrNull;
+    String visibility = activeDesk == null ? 'private' : 'desk';
+    String? deskId = activeDesk?['id']?.toString();
     DateTime? expiresAt;
     final selected = <String>{};
 
@@ -209,18 +211,11 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            runSpacing: 12,
-            children: [
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Documents & Vault', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 5),
-                Text('Choose a space, then open a category to see its documents.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ]),
-              FilledButton.icon(onPressed: _upload, icon: const Icon(Icons.upload_file), label: const Text('Upload document')),
-            ],
+          PageHeader(
+            title: 'Documents',
+            subtitle: 'Keep personal records private, share directly with Buddies, or collaborate inside a Shared Desk.',
+            icon: Icons.folder_copy_outlined,
+            action: FilledButton.icon(onPressed: _upload, icon: const Icon(Icons.upload_file), label: const Text('Upload')),
           ),
           const SizedBox(height: 22),
           FutureBuilder<List<dynamic>>(
@@ -260,7 +255,16 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
                         .toList(),
                   ),
                 ),
+                const SizedBox(height: 14),
+                if (_workspaceFilter != 'all' && _workspaceFilter != 'personal')
+                  ContextBanner(
+                    icon: Icons.groups_2_outlined,
+                    title: 'Shared Desk library',
+                    message: 'Files uploaded while this Desk is selected are shared with all current members by default. Everyone can preview and download them; non-viewer members can contribute files too.',
+                  ),
                 const SizedBox(height: 22),
+                SectionTitle('Categories', subtitle: '$workspaceLabel · ${inWorkspace.length} files'),
+                const SizedBox(height: 12),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 900),
                   child: LayoutBuilder(builder: (context, constraints) {

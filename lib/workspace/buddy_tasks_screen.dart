@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/ui_components.dart';
 import '../core/app_semantics.dart';
 import '../services/workspace_service.dart';
 import 'task_bill_detail_screens.dart';
@@ -225,18 +226,11 @@ class _BuddyTasksScreenState extends State<BuddyTasksScreen> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          runSpacing: 12,
-          children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Tasks', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 5),
-              Text('Assign work to yourself, Shared Desk members, or Buddies.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            ]),
-            FilledButton.icon(onPressed: _assignTask, icon: const Icon(Icons.assignment_add), label: const Text('Assign Task')),
-          ],
+        PageHeader(
+          title: 'Tasks',
+          subtitle: 'Keep personal work, Buddy assignments and Shared Desk responsibilities easy to scan.',
+          icon: Icons.task_alt_outlined,
+          action: FilledButton.icon(onPressed: _assignTask, icon: const Icon(Icons.assignment_add), label: const Text('New task')),
         ),
         const SizedBox(height: 20),
         SingleChildScrollView(
@@ -284,7 +278,7 @@ class _BuddyTasksScreenState extends State<BuddyTasksScreen> {
               ),
               const SizedBox(height: 18),
               if (items.isEmpty)
-                const Card(child: Padding(padding: EdgeInsets.all(34), child: Center(child: Text('No tasks in this section.'))))
+                const EmptyState(icon: Icons.task_alt_outlined, title: 'No tasks here', message: 'Try another filter or create a task for yourself, a Buddy, or a Shared Desk member.')
               else
                 ...items.map((item) {
                   final status = '${item['status']}';

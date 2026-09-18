@@ -69,7 +69,7 @@ class SectionTitle extends StatelessWidget {
         children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w850)),
+              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               if (subtitle != null) ...[
                 const SizedBox(height: 3),
                 Text(subtitle!, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),

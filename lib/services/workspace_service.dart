@@ -25,6 +25,11 @@ class WorkspaceService {
     return List<Map<String, dynamic>>.from(data as List);
   }
 
+  Future<List<Map<String, dynamic>>> sharedDeskActivity(String deskId, {int limit = 40}) async {
+    final data = await _db.rpc('get_shared_desk_activity', params: {'p_desk_id': deskId, 'p_limit': limit});
+    return List<Map<String, dynamic>>.from(data as List);
+  }
+
   Future<List<Map<String, dynamic>>> deskMembers(String deskId) async {
     final data = await _db.rpc('get_desk_members', params: {'p_desk_id': deskId});
     return List<Map<String, dynamic>>.from(data as List);

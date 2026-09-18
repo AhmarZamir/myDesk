@@ -386,7 +386,7 @@ class _AppShellState extends State<AppShell> {
                       child: Row(children: [
                         Expanded(
                           child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(_labels[index], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w850)),
+                            Text(_labels[index], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                             Text(_moduleHint(index), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                           ]),
                         ),
@@ -409,7 +409,7 @@ class _AppShellState extends State<AppShell> {
               title: Row(children: [
                 _brandIcon(),
                 const SizedBox(width: 10),
-                Expanded(child: Text(_labels[index], overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w850))),
+                Expanded(child: Text(_labels[index], overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800))),
               ]),
               actions: [_notificationButton(rows), _profileButton()],
             ),

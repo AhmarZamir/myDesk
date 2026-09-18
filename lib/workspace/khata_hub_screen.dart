@@ -45,10 +45,7 @@ class _BalanceCard extends StatelessWidget {
   final String label; final double amount; final IconData icon; final Color color;
   const _BalanceCard({required this.label, required this.amount, required this.icon, required this.color});
   @override Widget build(BuildContext context) => Card(
-    child: InkWell(
-      borderRadius: BorderRadius.circular(22),
-      onTap: () {},
-      child: Padding(padding: const EdgeInsets.all(18), child: Row(children: [
+    child: Padding(padding: const EdgeInsets.all(18), child: Row(children: [
         CircleAvatar(backgroundColor: AppSemantics.soft(color), child: Icon(icon, color: color)),
         const SizedBox(width: 14),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -59,7 +56,7 @@ class _BalanceCard extends StatelessWidget {
             child: Text('Rs. ${amount.toStringAsFixed(2)}', key: ValueKey(amount), style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: color)),
           ),
         ])),
-      ])),
+      ]),
     ),
   );
 }

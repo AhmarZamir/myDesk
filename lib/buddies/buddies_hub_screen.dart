@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/ui_components.dart';
 import '../services/workspace_service.dart';
 import 'buddies_screen.dart';
 
@@ -20,16 +21,18 @@ class _BuddiesHubScreenState extends State<BuddiesHubScreen> {
   }
 
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(24), children: [
-    Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 12, children: [
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('myDesk Buddies', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)), const SizedBox(height: 5), Text('People you trust and collaborate with across myDesk.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))]),
-      FilledButton.icon(onPressed: _manage, icon: const Icon(Icons.person_add_alt_1), label: const Text('Invite / Manage')),
-    ]),
+    PageHeader(
+      title: 'Buddies',
+      subtitle: 'Trusted people you can share documents, tasks and Khata with directly.',
+      icon: Icons.people_outline,
+      action: FilledButton.icon(onPressed: _manage, icon: const Icon(Icons.person_add_alt_1), label: const Text('Invite / Manage')),
+    ),
     const SizedBox(height: 22),
     FutureBuilder<List<dynamic>>(future: _future, builder: (context, snap) {
       if (snap.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
       if (snap.hasError) return Card(child: Padding(padding: const EdgeInsets.all(24), child: Text('Could not load Buddies: ${snap.error}')));
       final buddies = List<Map<String,dynamic>>.from(snap.data![0] as List); final docs = List<Map<String,dynamic>>.from(snap.data![1] as List); final khata = List<Map<String,dynamic>>.from(snap.data![2] as List); final desks = List<Map<String,dynamic>>.from(snap.data![3] as List);
-      if (buddies.isEmpty) return Card(child: Padding(padding: const EdgeInsets.all(36), child: Column(children: [const Icon(Icons.people_outline, size: 46), const SizedBox(height: 10), const Text('No Buddies yet', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)), const SizedBox(height: 12), FilledButton.icon(onPressed: _manage, icon: const Icon(Icons.person_add_alt_1), label: const Text('Invite Buddy'))])));
+      if (buddies.isEmpty) return EmptyState(icon: Icons.people_outline, title: 'No Buddies yet', message: 'Invite someone you trust to share files, assign tasks and keep a two-way Khata.', action: FilledButton.icon(onPressed: _manage, icon: const Icon(Icons.person_add_alt_1), label: const Text('Invite Buddy')));
       return LayoutBuilder(builder: (context, constraints) { final cols = constraints.maxWidth >= 900 ? 3 : constraints.maxWidth >= 580 ? 2 : 1; return GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: buddies.length, gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, crossAxisSpacing: 14, mainAxisSpacing: 14, childAspectRatio: cols == 1 ? 3 : 1.35), itemBuilder: (_, i) {
         final b = buddies[i]; final id = '${b['user_id']}'; final entries = khata.where((e) => '${e['buddy_user_id']}' == id).toList();
         return Card(child: InkWell(borderRadius: BorderRadius.circular(20), onTap: () => showDialog<void>(context: context, builder: (_) => _BuddyProfileDialog(buddy: b, entries: entries, docs: docs, desks: desks)), child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

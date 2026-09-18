@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../core/ui_components.dart';
 import '../services/desk_service.dart';
 import '../services/workspace_service.dart';
 import '../services/buddy_service.dart';
@@ -49,13 +50,15 @@ class _SharedDesksHubScreenState extends State<SharedDesksHubScreen> {
   void _message(String text) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text))); }
 
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(24), children: [
-    Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 12, children: [
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Shared Desks', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 5), Text('Each space has its own people, documents, bills and tasks.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+    PageHeader(
+      title: 'Shared Desks',
+      subtitle: 'Collaborative spaces where members can share files, assign work and keep responsibilities visible.',
+      icon: Icons.groups_2_outlined,
+      action: Wrap(spacing: 8, children: [
+        OutlinedButton.icon(onPressed: _join, icon: const Icon(Icons.login), label: const Text('Join')),
+        FilledButton.icon(onPressed: _create, icon: const Icon(Icons.add), label: const Text('New Desk')),
       ]),
-      Wrap(spacing: 8, children: [OutlinedButton.icon(onPressed: _join, icon: const Icon(Icons.login), label: const Text('Join desk')), FilledButton.icon(onPressed: _create, icon: const Icon(Icons.add), label: const Text('Create desk'))]),
-    ]),
+    ),
     const SizedBox(height: 22),
     FutureBuilder<List<dynamic>>(future: _future, builder: (context, snap) {
       if (snap.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
@@ -64,7 +67,7 @@ class _SharedDesksHubScreenState extends State<SharedDesksHubScreen> {
       final docs = List<Map<String,dynamic>>.from(snap.data![1] as List);
       final bills = List<Map<String,dynamic>>.from(snap.data![2] as List);
       final tasks = List<Map<String,dynamic>>.from(snap.data![3] as List);
-      if (desks.isEmpty) return const Card(child: Padding(padding: EdgeInsets.all(36), child: Center(child: Text('No Shared Desks yet.'))));
+      if (desks.isEmpty) return EmptyState(icon: Icons.groups_2_outlined, title: 'No Shared Desks yet', message: 'Create a space for family, roommates or a team, or join one with an invite code.', action: FilledButton.icon(onPressed: _create, icon: const Icon(Icons.add), label: const Text('Create your first Desk')));
       return LayoutBuilder(builder: (context, constraints) {
         final cols = constraints.maxWidth >= 1000 ? 3 : constraints.maxWidth >= 650 ? 2 : 1;
         return GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: desks.length, gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, crossAxisSpacing: 14, mainAxisSpacing: 14, childAspectRatio: cols == 1 ? 2.8 : 1.28), itemBuilder: (context, i) {
@@ -99,7 +102,10 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
   String get id => '${widget.desk['id']}';
 
   @override void initState() { super.initState(); _reload(); }
-  void _reload() => _future = Future.wait([_deskService.fetchDeskMembers(id), _workspace.documents(), _workspace.bills(), _workspace.tasks(), _buddyService.buddies()]);
+  void _reload() => _future = Future.wait([_deskService.fetchDeskMembers(id), _workspace.documents(), _workspace.bills(), _workspace.tasks(), _buddyService.buddies(), _safeActivity()]);
+  Future<List<Map<String, dynamic>>> _safeActivity() async {
+    try { return await _workspace.sharedDeskActivity(id); } catch (_) { return <Map<String, dynamic>>[]; }
+  }
   void _refresh() => setState(_reload);
 
   Future<void> _memberAction(Map<String,dynamic> member, String action) async {
@@ -174,14 +180,37 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
       final bills = List<Map<String,dynamic>>.from(snap.data![2] as List).where((e) => '${e['desk_id']}' == id).toList();
       final tasks = List<Map<String,dynamic>>.from(snap.data![3] as List).where((e) => '${e['desk_id']}' == id).toList();
       final buddies = List<Map<String,dynamic>>.from(snap.data![4] as List);
+      final activity = List<Map<String,dynamic>>.from(snap.data![5] as List);
       final buddyIds = buddies.map((b) => '${b['user_id']}').toSet();
       final openBills = bills.where((e) => e['status'] != 'paid').length;
       final openTasks = tasks.where((e) => e['status'] != 'completed').length;
       final canWrite = '${widget.desk['role']}' != 'viewer';
       return ListView(padding: const EdgeInsets.all(24), children: [
-        Card(child: Padding(padding: const EdgeInsets.all(20), child: Wrap(spacing: 20, runSpacing: 16, children: [
-          _LargeStat(icon: Icons.people_outline, value: members.length, label: 'Members'), _LargeStat(icon: Icons.description_outlined, value: docs.length, label: 'Documents'), _LargeStat(icon: Icons.receipt_long_outlined, value: openBills, label: 'Open bills'), _LargeStat(icon: Icons.task_alt, value: openTasks, label: 'Tasks to do'),
-        ]))),
+        ContextBanner(
+          icon: Icons.hub_outlined,
+          title: 'Everyone works from the same Desk',
+          message: canWrite
+              ? 'Anything shared here is visible to all current members. You can contribute files, tasks and bills; viewer members stay read-only.'
+              : 'You have viewer access. You can preview and download everything shared here, but you cannot add or change Desk content.',
+        ),
+        const SizedBox(height: 14),
+        LayoutBuilder(builder: (context, box) {
+          final cols = box.maxWidth >= 820 ? 4 : box.maxWidth >= 480 ? 2 : 1;
+          return GridView.count(
+            crossAxisCount: cols,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: cols == 1 ? 3.2 : 1.65,
+            children: [
+              MetricCard(icon: Icons.people_outline, value: '${members.length}', label: 'Members'),
+              MetricCard(icon: Icons.description_outlined, value: '${docs.length}', label: 'Shared files', onTap: () => setState(() => section = 'documents')),
+              MetricCard(icon: Icons.task_alt, value: '$openTasks', label: 'Open tasks', onTap: () => setState(() => section = 'tasks')),
+              MetricCard(icon: Icons.receipt_long_outlined, value: '$openBills', label: 'Open bills', onTap: () => setState(() => section = 'bills')),
+            ],
+          );
+        }),
         if (canWrite) ...[
           const SizedBox(height: 14),
           Card(
@@ -196,17 +225,35 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
           ),
         ],
         const SizedBox(height: 16),
-        SingleChildScrollView(scrollDirection: Axis.horizontal, child: Wrap(spacing: 8, children: {'overview':'Overview','members':'Members','documents':'Documents','bills':'Bills','tasks':'Tasks'}.entries.map((e) => ChoiceChip(label: Text(e.value), selected: section == e.key, onSelected: (_) => setState(() => section = e.key))).toList())),
+        SingleChildScrollView(scrollDirection: Axis.horizontal, child: Wrap(spacing: 8, children: {'overview':'Overview','activity':'Activity','members':'Members','documents':'Files','bills':'Bills','tasks':'Tasks'}.entries.map((e) => ChoiceChip(label: Text(e.value), selected: section == e.key, onSelected: (_) => setState(() => section = e.key))).toList())),
         const SizedBox(height: 18),
         if (section == 'overview') ...[
-          _Section(title: 'Tasks to be done', items: tasks.where((e) => e['status'] != 'completed').take(5).map((e) => ListTile(leading: const Icon(Icons.task_alt), title: Text('${e['title']}'), subtitle: Text('${e['status']} · ${e['assignee_name'] ?? 'Unassigned'}'))).toList()),
-          _Section(title: 'Recently shared content', items: docs.take(5).map((e) => ListTile(
-            leading: const Icon(Icons.description_outlined),
+          SectionTitle('What needs attention', subtitle: 'Open work and the latest shared files'),
+          const SizedBox(height: 10),
+          _Section(title: 'Open tasks', items: tasks.where((e) => e['status'] != 'completed').take(5).map((e) => ListTile(
+            leading: const Icon(Icons.task_alt),
             title: Text('${e['title']}'),
-            subtitle: Text('${e['category']} · ${e['visibility']}'),
-            onTap: () => _openDocument(e),
-            trailing: IconButton(tooltip: 'Download', icon: const Icon(Icons.download_rounded), onPressed: () => _downloadDocument(e)),
+            subtitle: Text('${e['status']} · ${e['assignee_name'] ?? 'Unassigned'}'),
           )).toList()),
+          _Section(title: 'Recently shared', items: docs.take(5).map((e) {
+            final owner = members.where((m) => '${m['user_id']}' == '${e['owner_id']}').toList();
+            final name = owner.isEmpty ? 'Member' : '${owner.first['full_name']}';
+            return ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: Text('${e['title']}'),
+              subtitle: Text('Shared by $name · ${e['category']}'),
+              onTap: () => _openDocument(e),
+              trailing: IconButton(tooltip: 'Download', icon: const Icon(Icons.download_rounded), onPressed: () => _downloadDocument(e)),
+            );
+          }).toList()),
+        ],
+        if (section == 'activity') ...[
+          SectionTitle('Desk activity', subtitle: 'A shared timeline of files, tasks and bills'),
+          const SizedBox(height: 10),
+          if (activity.isEmpty)
+            const EmptyState(icon: Icons.history_rounded, title: 'Activity will appear here', message: 'Run migration 020 to enable the shared activity timeline. Existing Desk content still works normally.')
+          else
+            ...activity.map((e) => _ActivityTile(item: e)),
         ],
         if (section == 'members') ...members.map((m) {
           final role = '${m['role']}';
@@ -224,19 +271,23 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
             ]),
           ));
         }),
-        if (section == 'documents') ..._documentCards(docs),
+        if (section == 'documents') ..._documentCards(docs, members),
         if (section == 'bills') ..._simpleCards(bills, Icons.receipt_long_outlined, (e) => '${e['title']} · Rs. ${e['amount']}', (e) => '${e['status']}${e['due_date'] != null ? ' · due ${e['due_date']}' : ''}'),
         if (section == 'tasks') ..._simpleCards(tasks, Icons.task_alt, (e) => '${e['title']}', (e) => '${e['status']} · ${e['priority']} priority · ${e['assignee_name'] ?? 'Unassigned'}'),
       ]);
     }),
   );
 
-  List<Widget> _documentCards(List<Map<String,dynamic>> rows) => rows.isEmpty
+  List<Widget> _documentCards(List<Map<String,dynamic>> rows, List<Map<String,dynamic>> members) => rows.isEmpty
       ? [const Card(child: Padding(padding: EdgeInsets.all(30), child: Center(child: Text('Nothing here yet.'))))]
-      : rows.map((e) => Card(child: ListTile(
-            leading: const Icon(Icons.description_outlined),
+      : rows.map((e) {
+          final owner = members.where((m) => '${m['user_id']}' == '${e['owner_id']}').toList();
+          final ownerName = owner.isEmpty ? 'Member' : '${owner.first['full_name']}';
+          final ownerAvatar = owner.isEmpty ? null : owner.first['avatar_url']?.toString();
+          return Card(child: ListTile(
+            leading: _Avatar(name: ownerName, url: ownerAvatar),
             title: Text('${e['title']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text('${e['category']} · ${e['visibility']}'),
+            subtitle: Text('Shared by $ownerName · ${e['category']}'),
             onTap: () => _openDocument(e),
             trailing: PopupMenuButton<String>(
               onSelected: (value) async {
@@ -248,7 +299,8 @@ class _SharedDeskDashboardState extends State<SharedDeskDashboard> {
                 PopupMenuItem(value: 'download', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.download_rounded), title: Text('Download'))),
               ],
             ),
-          ))).toList();
+          ));
+        }).toList();
 
   List<Widget> _simpleCards(List<Map<String,dynamic>> rows, IconData icon, String Function(Map<String,dynamic>) title, String Function(Map<String,dynamic>) subtitle) => rows.isEmpty ? [const Card(child: Padding(padding: EdgeInsets.all(30), child: Center(child: Text('Nothing here yet.'))))] : rows.map((e) => Card(child: ListTile(leading: Icon(icon), title: Text(title(e), style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(subtitle(e))))).toList();
 }
@@ -258,3 +310,43 @@ class _LargeStat extends StatelessWidget { final IconData icon; final int value;
 class _Section extends StatelessWidget { final String title; final List<Widget> items; const _Section({required this.title, required this.items}); @override Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)), const SizedBox(height: 8), if (items.isEmpty) const Card(child: Padding(padding: EdgeInsets.all(22), child: Text('Nothing here yet.'))) else Card(child: Column(children: items))])); }
 class _Avatar extends StatelessWidget { final String name; final String? url; const _Avatar({required this.name, this.url}); @override Widget build(BuildContext context) { if (url != null && url!.isNotEmpty) return CircleAvatar(backgroundImage: NetworkImage(url!)); return CircleAvatar(child: Text(name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase())); } }
 IconData _deskIcon(String type) => type == 'family' ? Icons.family_restroom : type == 'business' ? Icons.business_center_outlined : type == 'roommates' ? Icons.home_outlined : Icons.groups_outlined;
+
+
+class _ActivityTile extends StatelessWidget {
+  final Map<String, dynamic> item;
+  const _ActivityTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = '${item['kind']}';
+    final icon = kind == 'document' ? Icons.description_outlined : kind == 'task' ? Icons.task_alt : Icons.receipt_long_outlined;
+    final name = '${item['actor_name'] ?? 'Member'}';
+    final avatar = item['actor_avatar_url']?.toString();
+    final created = DateTime.tryParse('${item['created_at'] ?? ''}')?.toLocal();
+    final when = created == null ? '' : _relative(created);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Card(
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          leading: Stack(clipBehavior: Clip.none, children: [
+            _Avatar(name: name, url: avatar),
+            Positioned(right: -4, bottom: -3, child: CircleAvatar(radius: 10, child: Icon(icon, size: 11))),
+          ]),
+          title: Text('${item['title']}', style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text('$name · ${item['detail']}${when.isEmpty ? '' : ' · $when'}'),
+        ),
+      ),
+    );
+  }
+
+  static String _relative(DateTime date) {
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+}

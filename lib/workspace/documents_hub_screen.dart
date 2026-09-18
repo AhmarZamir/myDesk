@@ -49,7 +49,8 @@ class _DocumentsHubScreenState extends State<DocumentsHubScreen> {
     final buddies = List<Map<String, dynamic>>.from(results[1]);
     final title = TextEditingController(text: file.name);
     String category = 'other';
-    final activeDesk = desks.where((d) => '${d['id']}' == _workspaceFilter).cast<Map<String, dynamic>?>().firstOrNull;
+    final matchingDesks = desks.where((d) => '${d['id']}' == _workspaceFilter).toList();
+    final Map<String, dynamic>? activeDesk = matchingDesks.isEmpty ? null : matchingDesks.first;
     String visibility = activeDesk == null ? 'private' : 'desk';
     String? deskId = activeDesk?['id']?.toString();
     DateTime? expiresAt;
